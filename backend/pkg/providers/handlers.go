@@ -456,6 +456,14 @@ func (fp *flowProvider) GetInstallerHandler(ctx context.Context, taskID, subtask
 }
 
 func (fp *flowProvider) GetMemoristHandler(ctx context.Context, taskID, subtaskID *int64) (tools.ExecutorHandler, error) {
+	return fp.getMemoristHandler(ctx, taskID, subtaskID, false)
+}
+
+func (fp *flowProvider) GetResearchMemoristHandler(ctx context.Context, taskID, subtaskID *int64) (tools.ExecutorHandler, error) {
+	return fp.getMemoristHandler(ctx, taskID, subtaskID, true)
+}
+
+func (fp *flowProvider) getMemoristHandler(ctx context.Context, taskID, subtaskID *int64, researchOnly bool) (tools.ExecutorHandler, error) {
 	ptrTask, ptrSubtask, err := fp.getTaskAndSubtask(ctx, taskID, subtaskID)
 	if err != nil {
 		return nil, err
@@ -505,11 +513,22 @@ func (fp *flowProvider) GetMemoristHandler(ctx context.Context, taskID, subtaskI
 			executionDetails += "user no specified subtask, using all subtasks related to the task\n"
 		}
 
+		memoristQuestion := action.Question
+		memoristExecutionContext := executionContext
+		memoristTask, memoristSubtask := requestedTask, requestedSubtask
+		metadataTask, metadataSubtask := ptrTask, ptrSubtask
+		if researchOnly {
+			memoristQuestion, memoristTask, memoristSubtask, memoristExecutionContext = sanitizeSearcherContext(
+				action.Question, requestedTask, requestedSubtask, executionContext,
+			)
+			_, metadataTask, metadataSubtask, _ = sanitizeSearcherContext("", ptrTask, ptrSubtask, "")
+		}
+
 		memoristContext := map[string]map[string]any{
 			"user": {
-				"Question":         action.Question,
-				"Task":             requestedTask,
-				"Subtask":          requestedSubtask,
+				"Question":         memoristQuestion,
+				"Task":             memoristTask,
+				"Subtask":          memoristSubtask,
 				"ExecutionDetails": executionDetails,
 			},
 			"system": {
@@ -523,7 +542,7 @@ func (fp *flowProvider) GetMemoristHandler(ctx context.Context, taskID, subtaskI
 				"DockerImage":             fp.image,
 				"Cwd":                     docker.WorkFolderPathInContainer,
 				"ContainerPorts":          fp.getContainerPortsDescription(),
-				"ExecutionContext":        executionContext,
+				"ExecutionContext":        memoristExecutionContext,
 				"Lang":                    fp.language,
 				"CurrentTime":             getCurrentTime(),
 				"ToolPlaceholder":         ToolPlaceholder,
@@ -538,11 +557,11 @@ func (fp *flowProvider) GetMemoristHandler(ctx context.Context, taskID, subtaskI
 			langfuse.WithEvaluatorMetadata(langfuse.Metadata{
 				"user_context":      memoristContext["user"],
 				"system_context":    memoristContext["system"],
-				"requested_task":    requestedTask,
-				"requested_subtask": requestedSubtask,
+				"requested_task":    memoristTask,
+				"requested_subtask": memoristSubtask,
 				"execution_details": executionDetails,
-				"task":              ptrTask,
-				"subtask":           ptrSubtask,
+				"task":              metadataTask,
+				"subtask":           metadataSubtask,
 				"lang":              fp.language,
 			}),
 		)
@@ -566,7 +585,7 @@ func (fp *flowProvider) GetMemoristHandler(ctx context.Context, taskID, subtaskI
 			langfuse.WithEvaluatorLevel(langfuse.ObservationLevelDebug),
 		)
 
-		memoristResult, err := fp.performMemorist(ctx, taskID, subtaskID, systemMemoristTmpl, userMemoristTmpl, action.Question)
+		memoristResult, err := fp.performMemorist(ctx, taskID, subtaskID, systemMemoristTmpl, userMemoristTmpl, memoristQuestion)
 		if err != nil {
 			return "", wrapError(ctx, "failed to get memorist result", err)
 		}
@@ -708,11 +727,14 @@ func (fp *flowProvider) GetSubtaskSearcherHandler(ctx context.Context, taskID, s
 	}
 
 	searcherHandler := func(ctx context.Context, search tools.ComplexSearch) (string, error) {
+		searchQuestion, searcherTask, searcherSubtask, searchExecutionContext := sanitizeSearcherContext(
+			search.Question, ptrTask, ptrSubtask, executionContext,
+		)
 		searcherContext := map[string]map[string]any{
 			"user": {
-				"Question": search.Question,
-				"Task":     ptrTask,
-				"Subtask":  ptrSubtask,
+				"Question": searchQuestion,
+				"Task":     searcherTask,
+				"Subtask":  searcherSubtask,
 			},
 			"system": {
 				"SearchResultToolName":    tools.SearchResultToolName,
@@ -720,7 +742,7 @@ func (fp *flowProvider) GetSubtaskSearcherHandler(ctx context.Context, taskID, s
 				"StoreAnswerToolName":     tools.StoreAnswerToolName,
 				"SummarizationToolName":   cast.SummarizationToolName,
 				"SummarizedContentPrefix": strings.ReplaceAll(csum.SummarizedContentPrefix, "\n", "\\n"),
-				"ExecutionContext":        executionContext,
+				"ExecutionContext":        searchExecutionContext,
 				"Cwd":                     docker.WorkFolderPathInContainer,
 				"Lang":                    fp.language,
 				"CurrentTime":             getCurrentTime(),
@@ -736,8 +758,8 @@ func (fp *flowProvider) GetSubtaskSearcherHandler(ctx context.Context, taskID, s
 			langfuse.WithEvaluatorMetadata(langfuse.Metadata{
 				"user_context":   searcherContext["user"],
 				"system_context": searcherContext["system"],
-				"task":           ptrTask,
-				"subtask":        ptrSubtask,
+				"task":           searcherTask,
+				"subtask":        searcherSubtask,
 				"lang":           fp.language,
 			}),
 		)
@@ -761,7 +783,7 @@ func (fp *flowProvider) GetSubtaskSearcherHandler(ctx context.Context, taskID, s
 			langfuse.WithEvaluatorLevel(langfuse.ObservationLevelDebug),
 		)
 
-		searcherResult, err := fp.performSearcher(ctx, taskID, subtaskID, systemSearcherTmpl, userSearcherTmpl, search.Question)
+		searcherResult, err := fp.performSearcher(ctx, taskID, subtaskID, systemSearcherTmpl, userSearcherTmpl, searchQuestion)
 		if err != nil {
 			return "", wrapError(ctx, "failed to get searcher result", err)
 		}
@@ -800,10 +822,13 @@ func (fp *flowProvider) GetTaskSearcherHandler(ctx context.Context, taskID int64
 	}
 
 	searcherHandler := func(ctx context.Context, search tools.ComplexSearch) (string, error) {
+		searchQuestion, searcherTask, _, searchExecutionContext := sanitizeSearcherContext(
+			search.Question, &task, nil, executionContext,
+		)
 		searcherContext := map[string]map[string]any{
 			"user": {
-				"Question": search.Question,
-				"Task":     task,
+				"Question": searchQuestion,
+				"Task":     searcherTask,
 			},
 			"system": {
 				"SearchResultToolName":    tools.SearchResultToolName,
@@ -811,7 +836,7 @@ func (fp *flowProvider) GetTaskSearcherHandler(ctx context.Context, taskID int64
 				"StoreAnswerToolName":     tools.StoreAnswerToolName,
 				"SummarizationToolName":   cast.SummarizationToolName,
 				"SummarizedContentPrefix": strings.ReplaceAll(csum.SummarizedContentPrefix, "\n", "\\n"),
-				"ExecutionContext":        executionContext,
+				"ExecutionContext":        searchExecutionContext,
 				"Cwd":                     docker.WorkFolderPathInContainer,
 				"Lang":                    fp.language,
 				"CurrentTime":             getCurrentTime(),
@@ -827,7 +852,7 @@ func (fp *flowProvider) GetTaskSearcherHandler(ctx context.Context, taskID int64
 			langfuse.WithEvaluatorMetadata(langfuse.Metadata{
 				"user_context":   searcherContext["user"],
 				"system_context": searcherContext["system"],
-				"task":           task,
+				"task":           searcherTask,
 				"lang":           fp.language,
 			}),
 		)
@@ -851,7 +876,7 @@ func (fp *flowProvider) GetTaskSearcherHandler(ctx context.Context, taskID int64
 			langfuse.WithEvaluatorLevel(langfuse.ObservationLevelDebug),
 		)
 
-		searcherResult, err := fp.performSearcher(ctx, &taskID, nil, systemSearcherTmpl, userSearcherTmpl, search.Question)
+		searcherResult, err := fp.performSearcher(ctx, &taskID, nil, systemSearcherTmpl, userSearcherTmpl, searchQuestion)
 		if err != nil {
 			return "", wrapError(ctx, "failed to get searcher result", err)
 		}

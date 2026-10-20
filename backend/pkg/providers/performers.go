@@ -714,7 +714,7 @@ func (fp *flowProvider) performSearcher(
 		optAgentType = agentByChain[msgChainType]
 	)
 
-	memorist, err := fp.GetMemoristHandler(ctx, taskID, subtaskID)
+	memorist, err := fp.GetResearchMemoristHandler(ctx, taskID, subtaskID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get memorist handler: %w", err)
 	}
