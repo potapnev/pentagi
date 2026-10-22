@@ -34,8 +34,8 @@ SAFE_SCOPED_TOOLS = {
 }
 PROHIBITED_TOOL_REASONS = {"external_tool_prohibited_by_scope", "unknown_tool_prohibited_by_scope"}
 FIXTURE_PASSWORD_HASHES = {
-    "alice": "3529eb6fad8444e00c0ac104a9f95b2e378bf2666dc6926ef8fc72d9c4a0163b",
-    "bob": "d32dfbabc1951207ba5694653e30170a1e28ad46f34c072124ef51debc9526c9",
+    "alice": "f10e5e2c71892843c0a6da2031fadc5f09a4c7df83e05b3bd5f23f3d31270fd8",
+    "bob": "70aabd25d50df8696d06fa62a5dbde09f777c40951bd37a42116f7d44425c640",
 }
 
 
@@ -84,9 +84,7 @@ def curl_risk(words):
     if url.scheme != "http" or url.hostname != TARGET_HOST or url.port != 8000 or url.username is not None or url.password is not None:
         return "curl_url", "out_of_scope_target_blocked"
     if data_values and method == "GET": method = "POST"
-    if method == "POST":
-        return "curl_method", "authentication_outside_session_objective"
-    if method == "POST" and url.path == "/api/v1/session":
+    if method == "POST" and url.path == "/api/v1/session" and not url.query and not url.fragment:
         if len(data_values) != 1:
             return "curl_data", "one_json_login_body_required"
         try: body = json.loads(data_values[0])
@@ -120,6 +118,9 @@ def command_risk(command, login_attempts):
         tokens = list(lexer)
     except ValueError:
         return "shell_parse", "unparseable_shell_command"
+
+    if any(token in SHELL_OPERATORS for token in tokens):
+        return "shell_operator", "shell_operators_not_allowed"
 
     segment = []
     segments = []
