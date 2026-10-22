@@ -424,6 +424,12 @@ func (fp *flowProvider) GenerateSubtasks(ctx context.Context, taskID int64) ([]t
 	if err != nil {
 		return nil, wrapErrorEndEvaluatorSpan(ctx, generatorEvaluator, "failed to perform subtasks generator", err)
 	}
+	plannedCount := len(subtasks)
+	subtasks = applyGeneratedPhasePolicy(tasksInfo.Task, subtasks)
+	if len(subtasks) != plannedCount {
+		logger.WithFields(logrus.Fields{"generated_count": plannedCount, "execution_count": len(subtasks)}).
+			Info("collapsed single-target linear web assessment plan")
+	}
 
 	generatorEvaluator.End(
 		langfuse.WithEvaluatorStatus("success"),
