@@ -133,14 +133,15 @@ type Config struct {
 	SummarizerKeepQASections int  `env:"SUMMARIZER_KEEP_QA_SECTIONS" envDefault:"1"`
 
 	// === LLM Provider: Custom/Self-Hosted ===
-	LLMServerURL               string `env:"LLM_SERVER_URL"`
-	LLMServerKey               string `env:"LLM_SERVER_KEY"`
-	LLMServerModel             string `env:"LLM_SERVER_MODEL"`
-	LLMServerProvider          string `env:"LLM_SERVER_PROVIDER"`
-	LLMServerConfig            string `env:"LLM_SERVER_CONFIG_PATH"`
-	LLMServerPreserveReasoning bool   `env:"LLM_SERVER_PRESERVE_REASONING" envDefault:"false"`
-	LLMServerAPIType           string `env:"LLM_SERVER_API_TYPE"`
-	LLMServerAPIVersion        string `env:"LLM_SERVER_API_VERSION" envDefault:"2024-10-21"`
+	LLMServerToolCallIDTemplate string `env:"LLM_SERVER_TOOL_CALL_ID_TEMPLATE"`
+	LLMServerURL                string `env:"LLM_SERVER_URL"`
+	LLMServerKey                string `env:"LLM_SERVER_KEY"`
+	LLMServerModel              string `env:"LLM_SERVER_MODEL"`
+	LLMServerProvider           string `env:"LLM_SERVER_PROVIDER"`
+	LLMServerConfig             string `env:"LLM_SERVER_CONFIG_PATH"`
+	LLMServerPreserveReasoning  bool   `env:"LLM_SERVER_PRESERVE_REASONING" envDefault:"false"`
+	LLMServerAPIType            string `env:"LLM_SERVER_API_TYPE"`
+	LLMServerAPIVersion         string `env:"LLM_SERVER_API_VERSION" envDefault:"2024-10-21"`
 
 	// === LLM Provider: Ollama (Local/Remote) ===
 	OllamaServerURL               string `env:"OLLAMA_SERVER_URL"`

@@ -52,12 +52,13 @@ func DefaultProviderConfig(cfg *config.Config) (*pconfig.ProviderConfig, error) 
 }
 
 type customProvider struct {
-	llm            *openai.LLM
-	model          string
-	models         pconfig.ModelsConfig
-	providerName   provider.ProviderName
-	providerConfig *pconfig.ProviderConfig
-	providerPrefix string
+	llm                *openai.LLM
+	model              string
+	models             pconfig.ModelsConfig
+	providerName       provider.ProviderName
+	providerConfig     *pconfig.ProviderConfig
+	toolCallIDTemplate string
+	providerPrefix     string
 }
 
 type customAPI struct {
@@ -161,12 +162,13 @@ func New(
 	}
 
 	return &customProvider{
-		llm:            client,
-		model:          baseModel,
-		models:         models,
-		providerName:   providerName,
-		providerConfig: providerConfig,
-		providerPrefix: cfg.LLMServerProvider,
+		toolCallIDTemplate: cfg.LLMServerToolCallIDTemplate,
+		llm:                client,
+		model:              baseModel,
+		models:             models,
+		providerName:       providerName,
+		providerConfig:     providerConfig,
+		providerPrefix:     cfg.LLMServerProvider,
 	}, nil
 }
 
@@ -272,5 +274,5 @@ func (p *customProvider) GetUsage(info map[string]any) pconfig.CallUsage {
 }
 
 func (p *customProvider) GetToolCallIDTemplate(ctx context.Context, prompter templates.Prompter) (string, error) {
-	return provider.DetermineToolCallIDTemplate(ctx, p, pconfig.OptionsTypeSimple, prompter, "")
+	return provider.DetermineToolCallIDTemplate(ctx, p, pconfig.OptionsTypeSimple, prompter, p.toolCallIDTemplate)
 }

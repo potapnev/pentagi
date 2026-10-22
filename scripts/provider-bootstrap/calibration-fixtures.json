@@ -1,0 +1,184 @@
+{
+  "get_number": {
+    "request": {
+      "model": "local-qwen-9b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "<role>\nYou are a helpful assistant that calls functions when requested.\n</role>\n\n<task>\nCall the get_number function three times in parallel with the value 42 as requested.\n</task>\n\n<mandatory_protocol>\nCRITICAL: You MUST respond ONLY by calling the get_number function three times in parallel.\n\nDO NOT:\n- Write explanatory text without calling the function\n- Describe what you will do instead of doing it\n- Explain your reasoning before calling the function\n- Ask questions or request clarification\n- End your turn without making function calls\n- Provide a text response as a substitute for function calls\n\nREQUIRED ACTION: Call get_number function exactly three times in parallel with value=42.\n\nCOMPLETION REQUIREMENT: Your work is NOT complete until you have successfully invoked the get_number function exactly three times.\nDO NOT terminate, finish, or end your response without making these function calls.\n\nAny response that does not include exactly three function calls will be treated as a CRITICAL ERROR.\n</mandatory_protocol>\n\n<context>\nc49c8f98-a6ac-45cf-b68c-d502833d74e3\n</context>\n\n<instruction>\nCall the get_number function three times in parallel with the parameter value set to 42.\n\nIMPORTANT: You must ONLY respond by calling the get_number function three times. Any text-only response will be rejected as a failure.\n</instruction>\n"
+        },
+        {
+          "role": "user",
+          "content": "Call the get_number function"
+        }
+      ],
+      "temperature": 0,
+      "top_p": 1,
+      "max_completion_tokens": 4096,
+      "n": 1,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "get_number",
+            "description": "Get a number value",
+            "parameters": {
+              "properties": {
+                "value": {
+                  "description": "The number value",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "value"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "response": {
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "get_number",
+                  "arguments": "{\"value\":42}"
+                },
+                "id": "FB2Ayk6joXRNo7PGXaujWG4xbz3HYv8g"
+              },
+              {
+                "type": "function",
+                "function": {
+                  "name": "get_number",
+                  "arguments": "{\"value\":42}"
+                },
+                "id": "WBnY2qn3wYLhJzrfWoJzyNjQsP0o7e6W"
+              },
+              {
+                "type": "function",
+                "function": {
+                  "name": "get_number",
+                  "arguments": "{\"value\":42}"
+                },
+                "id": "sfPw6g5U1Ydbxr0J4Z38yYTwOaBhz5Pp"
+              }
+            ]
+          }
+        }
+      ],
+      "created": 1792692127,
+      "model": "local-qwen-9b",
+      "system_fingerprint": "b1-7584430",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 78,
+        "prompt_tokens": 593,
+        "total_tokens": 671,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "id": "chatcmpl-AM5L0VpDAP6p7J9yRYbKCF1HGbsfzMFO",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 593,
+        "prompt_ms": 1922.276,
+        "prompt_per_token_ms": 3.241612141652614,
+        "prompt_per_second": 308.4884792818513,
+        "predicted_n": 78,
+        "predicted_ms": 1258.967,
+        "predicted_per_token_ms": 16.35022077922078,
+        "predicted_per_second": 61.16125363095299,
+        "draft_n": 66,
+        "draft_n_accepted": 66
+      }
+    }
+  },
+  "submit_pattern": {
+    "request": {
+      "model": "local-qwen-9b",
+      "messages": [
+        {
+          "role": "system",
+          "content": "<role>\nYou are a Pattern Analysis Expert that identifies string pattern templates from examples.\n</role>\n\n<task>\nAnalyze the provided tool call ID samples and determine the pattern template that describes their format.\n</task>\n\n<mandatory_protocol>\nCRITICAL: You MUST respond ONLY by calling the submit_pattern function. \n\nDO NOT:\n- Write explanatory text without calling the function\n- Describe your analysis in plain text\n- Explain your reasoning before calling the function\n- Ask questions or request clarification\n- End your turn without making a function call\n- Provide a text response as a substitute for a function call\n\nREQUIRED ACTION: Call submit_pattern function immediately with the detected pattern template.\n\nCOMPLETION REQUIREMENT: Your work is NOT complete until you have successfully invoked the submit_pattern function.\nDO NOT terminate, finish, or end your response without making this function call.\n\nAny response that does not include a function call will be treated as a CRITICAL ERROR and will force a retry.\n</mandatory_protocol>\n\n<pattern_format>\nThe pattern template uses the following format:\n- Literal parts: fixed text that appears in all samples (e.g., \"toolu_\", \"call_\")\n- Random parts: {r:LENGTH:CHARSET} where:\n  - LENGTH: exact number of random characters\n  - CHARSET: character set type\n    - d or digit: [0-9]\n    - l or lower: [a-z]\n    - u or upper: [A-Z]\n    - a or alpha: [a-zA-Z]\n    - x or alnum: [a-zA-Z0-9]\n    - h or hex: [0-9a-f]\n    - H or HEX: [0-9A-F]\n    - b or base62: [0-9A-Za-z]\n- Function placeholder: {f}\n  - Represents the function/tool name\n  - Used when tool call IDs contain the function name\n  - The function name varies but follows the same pattern structure\n\nExamples:\n- \"toolu_013wc5CxNCjWGN2rsAR82rJK\" \u2192 \"toolu_{r:24:b}\"\n- \"call_Z8ofZnYOCeOnpu0h2auwOgeR\" \u2192 \"call_{r:24:x}\"\n- \"chatcmpl-tool-23c5c0da71854f9bbd8774f7d0113a69\" \u2192 \"chatcmpl-tool-{r:32:h}\"\n- \"get_number:0\", \"submit_pattern:0\" \u2192 \"{f}:{r:1:d}\"\n</pattern_format>\n\n<identical_samples_rule>\nIf all samples are identical (e.g., every sample is \"get_number:0\"), treat the repeated value as containing a variable part.\nIdentify a segment that likely varies across calls (e.g., the number after a colon) and replace it with a random pattern.\nFor \"get_number:0\" \u2192 use \"get_number:{r:1:d}\" (single digit); for longer numeric suffixes use {r:N:d}.\nChoose charset and length that best fit the observed value.\n\nIf samples contain different function names (e.g., \"get_number:0\" and \"submit_pattern:0\"), use the {f} placeholder to represent the variable function name part. For example: \"{f}:{r:1:d}\".\n</identical_samples_rule>\n\n<samples>\n- Sample 0: `40eq2Sf11thfZvZ15RyWS0jw81tNFsoQ`\n- Sample 1: `418w2SrEYi4XT0UewoXA0fpKJPE76Z6W`\n- Sample 2: `CJ06eoMxtdGDDTXneQZKpNdAMusXGsUB`\n- Sample 3: `FB2Ayk6joXRNo7PGXaujWG4xbz3HYv8g`\n- Sample 4: `MHlZ9Y0BPILDvycg1wXuK6Jn0RcLNw9l`\n- Sample 5: `SBPXS9xzuT2zJ1XuUU6mexvsq4weg2gz`\n- Sample 6: `WBnY2qn3wYLhJzrfWoJzyNjQsP0o7e6W`\n- Sample 7: `WMKyNDb8ZvP1aevO3wFKKWbqVRdnTwcU`\n- Sample 8: `XYHXShktKEub2vTRBXuXPP96HBdUTh8Q`\n- Sample 9: `avCYsP2TZHDDfKZ8C81uxngDgpQLdA1t`\n- Sample 10: `dwIdi5ihfJVSTUX9eNkwR7t1NqCkNiR8`\n- Sample 11: `gyx7Vi1M1enZ7aDdGZhikJmzluWytBK7`\n- Sample 12: `n1gZVQ9H9YYBpANeYpkBlfFfIU4MaoJt`\n- Sample 13: `sfPw6g5U1Ydbxr0J4Z38yYTwOaBhz5Pp`\n- Sample 14: `wmfyypFGAEB0A9FReuliDc2tr6n0v4uE`\n</samples>\n\n\n<instruction>\nAnalyze the samples above and call the submit_pattern function with the correct pattern template that matches all provided samples.\n\nIMPORTANT: You must ONLY respond by calling the submit_pattern function. Any attempt to respond with plain text instead of a function call will be treated as a failure.\n</instruction>\n"
+        },
+        {
+          "role": "user",
+          "content": "Submit the detected pattern template for the function submit_pattern"
+        }
+      ],
+      "temperature": 0,
+      "top_p": 1,
+      "max_completion_tokens": 4096,
+      "n": 1,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "submit_pattern",
+            "description": "Submit the detected pattern template",
+            "parameters": {
+              "properties": {
+                "template": {
+                  "description": "The pattern template in format like 'toolu_{r:24:b}' or 'call_{r:24:x}' or '{f}:{r:1:d}'",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "template"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "response": {
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "```json\n{\"pattern\": \"{r:48:b}\"}\n```"
+          }
+        }
+      ],
+      "created": 1792692142,
+      "model": "local-qwen-9b",
+      "system_fingerprint": "b1-7584430",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 17,
+        "prompt_tokens": 1333,
+        "total_tokens": 1350,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "id": "chatcmpl-API7BGtcqg0CQys8gpbjQrdZNpTI3Mf2",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 1333,
+        "prompt_ms": 3247.741,
+        "prompt_per_token_ms": 2.4364148537134285,
+        "prompt_per_second": 410.43913292346895,
+        "predicted_n": 17,
+        "predicted_ms": 676.225,
+        "predicted_per_token_ms": 42.2640625,
+        "predicted_per_second": 23.660763799031386,
+        "draft_n": 36,
+        "draft_n_accepted": 13
+      }
+    }
+  }
+}
