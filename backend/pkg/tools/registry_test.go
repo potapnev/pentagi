@@ -24,6 +24,19 @@ func TestRegistry_TerminalToolDocumentsScopedHTTPBehavior(t *testing.T) {
 	}
 }
 
+func TestRegistry_SearchToolDistinguishesResearchFromTargetRequests(t *testing.T) {
+	description := GetRegistryDefinitions()[SearchToolName].Description
+	for _, want := range []string{
+		"cannot execute requests against the assessed target",
+		"Do not ask it to probe or guess target routes",
+		"use the Pentester terminal for in-scope requests",
+	} {
+		if !strings.Contains(description, want) {
+			t.Errorf("search tool description missing %q", want)
+		}
+	}
+}
+
 func TestRegistry_ToolType_StringNamesEveryType(t *testing.T) {
 	t.Parallel()
 

@@ -210,7 +210,9 @@ var registryDefinitions = map[string]llms.FunctionDefinition{
 		Description: "Search in a different search engines in the internet and long-term memory " +
 			"by your complex question to the researcher team member, also you can add some instructions to get result " +
 			"in a specific format or structure or content type like " +
-			"code or command samples, manuals, guides, exploits, vulnerability details, repositories, libraries, etc.",
+			"code or command samples, manuals, guides, exploits, vulnerability details, repositories, libraries, etc. " +
+			"This researcher cannot execute requests against the assessed target or establish target response status. " +
+			"Do not ask it to probe or guess target routes; use the Pentester terminal for in-scope requests.",
 		Parameters: reflector.Reflect(&ComplexSearch{}),
 	},
 	SearchResultToolName: {

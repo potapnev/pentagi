@@ -665,9 +665,17 @@ func (fp *flowProvider) performPentester(
 		return "", fmt.Errorf("failed to get pentester executor: %w", err)
 	}
 
+	// API route discovery happens before either planner or Pentester can make
+	// authentication and endpoint decisions. The discovery uses the same
+	// guarded terminal executor and persists as ordinary terminal evidence.
+	planningQuestion, discoveredPentesterPrompt := preparePentesterAPIDiscoveryContext(
+		ctx, executor, question, userPentesterTmpl,
+	)
+	userPentesterTmpl = discoveredPentesterPrompt
+
 	if fp.planning {
 		userPentesterTmplWithPlan, err := fp.performPlanner(
-			ctx, taskID, subtaskID, optAgentType, executor, userPentesterTmpl, question,
+			ctx, taskID, subtaskID, optAgentType, executor, userPentesterTmpl, planningQuestion,
 		)
 		if err != nil {
 			logrus.WithContext(ctx).WithError(err).Warn("failed to get task plan from planner, proceeding without plan")
