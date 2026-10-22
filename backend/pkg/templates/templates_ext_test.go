@@ -134,6 +134,7 @@ func TestTemplates_GetDefaultPrompts_PromptsCarryTheirKeyPhrases(t *testing.T) {
 			phrases: []string{
 				"cli_argument_protocol", "Hallucinated flags", "--help", "Cross-tool flag assumptions",
 				"Never copy a flag from one tool to another", "shell redirection", "Machine-readable output", "Argument quoting",
+				"terminal output starts with `BLOCKED:`", "treat it as unexecuted", "bypass the rejection with another executable",
 			},
 			forbidden: []string{"XSStrike", "xsstrike"},
 		},
