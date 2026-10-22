@@ -1,10 +1,15 @@
 package providers
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -73,6 +78,11 @@ func discoverAPIDocumentation(
 		})
 		if err != nil {
 			break
+		}
+		// Discovery is application-generated, so a model-response filter cannot
+		// authorize it. Require the operator's execution policy before Docker.
+		if err := authorizeAPIDiscovery(ctx, args); err != nil {
+			return "<api_documentation_discovery>API documentation discovery not authorized: " + err.Error() + "</api_documentation_discovery>"
 		}
 		callID := fmt.Sprintf("api-discovery-%d-%02d", time.Now().UnixNano(), i)
 		output, err := executor.Execute(ctx, 0, callID, tools.TerminalToolName, tools.TerminalToolName, "", args)
@@ -305,4 +315,41 @@ func formatAPIDiscoveryContext(sourceURL string, status int, routes []apiDocumen
 	b.WriteString("Treat prior route names without an executed, status-bearing target response or this documentation as unverified. Continue within the existing authorized scope.\n")
 	b.WriteString("</api_documentation_discovery>")
 	return b.String()
+}
+
+// authorizeAPIDiscovery fails closed without an explicit, command-bound decision.
+// The endpoint is operator configuration, never derived from assessment content.
+func authorizeAPIDiscovery(ctx context.Context, args json.RawMessage) error {
+	endpoint, err := url.Parse(os.Getenv("PENTAGI_API_DISCOVERY_GUARD_URL"))
+	if err != nil || endpoint.Scheme != "http" || (endpoint.Hostname() != "127.0.0.1" && endpoint.Hostname() != "::1") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+		return fmt.Errorf("a loopback execution guard must be configured")
+	}
+	var action tools.TerminalAction
+	if err := json.Unmarshal(args, &action); err != nil {
+		return fmt.Errorf("invalid discovery action")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(args))
+	if err != nil {
+		return fmt.Errorf("invalid execution guard request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	defer client.CloseIdleConnections()
+	response, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("execution guard unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("execution guard refused approval")
+	}
+	var decision struct {
+		Allowed       bool   `json:"allowed"`
+		CommandSHA256 string `json:"command_sha256"`
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, 4097))
+	if err != nil || len(data) > 4096 || json.Unmarshal(data, &decision) != nil || !decision.Allowed || decision.CommandSHA256 != fmt.Sprintf("%x", sha256.Sum256([]byte(action.Input))) {
+		return fmt.Errorf("execution guard denied discovery command")
+	}
+	return nil
 }

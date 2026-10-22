@@ -2,7 +2,11 @@ package providers
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -94,6 +98,7 @@ func (*apiDiscoveryTestExecutor) GetBarrierTools() []tools.FunctionInfo        {
 func (*apiDiscoveryTestExecutor) GetToolSchema(string) (*schema.Schema, error) { return nil, nil }
 
 func TestDiscoverAPIDocumentationUsesGuardedTerminalAndPublishedLink(t *testing.T) {
+	allowAPIDiscoveryForTest(t)
 	executor := &apiDiscoveryTestExecutor{outputs: []string{
 		"HTTP/1.1 200 OK\r\nLink: </openapi.json>; rel=\"service-desc\"\r\nContent-Length: 0\r\n\r\n\n[exit code: 0]",
 		"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"openapi\":\"3.0.0\",\"paths\":{\"/identity\":{\"get\":{}},\"/resources\":{\"post\":{}}}}\n[exit code: 0]",
@@ -127,6 +132,7 @@ func TestAPIDocumentationLinksResolveFromResponseAndStayOnTargetOrigin(t *testin
 }
 
 func TestPreparePentesterAPIDiscoveryContextRunsBeforePlannerAndAgent(t *testing.T) {
+	allowAPIDiscoveryForTest(t)
 	executor := &apiDiscoveryTestExecutor{outputs: []string{
 		"HTTP/1.1 200 OK\r\n\r\n{}\n[exit code: 0]",
 		"HTTP/1.1 200 OK\r\n\r\n{\"openapi\":\"3.0.0\",\"paths\":{\"/documented\":{\"get\":{}}}}\n[exit code: 0]",
@@ -143,6 +149,7 @@ func TestPreparePentesterAPIDiscoveryContextRunsBeforePlannerAndAgent(t *testing
 }
 
 func TestDiscoverAPIDocumentationRejectsCrossOriginLinkAndPolicyOutput(t *testing.T) {
+	allowAPIDiscoveryForTest(t)
 	executor := &apiDiscoveryTestExecutor{outputs: []string{
 		"HTTP/1.1 200 OK\r\nLink: <http://other.test/openapi.json>; rel=\"service-desc\"\r\n\r\n\n[exit code: 0]",
 		"BLOCKED: out of scope\n[exit code: 0]",
@@ -158,6 +165,7 @@ func TestDiscoverAPIDocumentationRejectsCrossOriginLinkAndPolicyOutput(t *testin
 }
 
 func TestDiscoverAPIDocumentationReportsMissingDocsAndIgnoresUntrustedLink(t *testing.T) {
+	allowAPIDiscoveryForTest(t)
 	outputs := []string{
 		"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" +
 			`<a href="https://untrusted.test/openapi.json">API docs</a>` + "\n[exit code: 0]",
@@ -185,6 +193,7 @@ func TestDiscoverAPIDocumentationReportsMissingDocsAndIgnoresUntrustedLink(t *te
 }
 
 func TestDiscoverAPIDocumentationRejectsOpenAPIFromNon2xxHTTP(t *testing.T) {
+	allowAPIDiscoveryForTest(t)
 	// A curl exit status of zero proves transport execution, not HTTP success.
 	// The real discovery path must reject an OpenAPI-looking body on HTTP 403.
 	executor := &apiDiscoveryTestExecutor{outputs: []string{
@@ -220,5 +229,55 @@ func TestParseOpenAPIDocumentFromPentesterTTYOutput(t *testing.T) {
 	}
 	if len(routes) != 1 || routes[0] != (apiDocumentedRoute{Method: "GET", Path: "/documented"}) {
 		t.Fatalf("unexpected parsed route inventory: %#v", routes)
+	}
+}
+
+func allowAPIDiscoveryForTest(t *testing.T) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var action tools.TerminalAction
+		if err := json.NewDecoder(r.Body).Decode(&action); err != nil {
+			t.Error(err)
+			w.WriteHeader(400)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"allowed": true, "command_sha256": fmt.Sprintf("%x", sha256.Sum256([]byte(action.Input)))})
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("PENTAGI_API_DISCOVERY_GUARD_URL", server.URL)
+}
+
+func TestAPIDiscoveryCannotBypassExecutionGuard(t *testing.T) {
+	for _, tc := range []struct {
+		name, response string
+		status         int
+	}{
+		{"missing guard", "", 0},
+		{"denied", `{"allowed":false}`, 200},
+		{"unavailable", `{"allowed":true}`, 503},
+		{"malformed", `invalid`, 200},
+		{"unbound approval", `{"allowed":true}`, 200},
+		{"redirect", ``, 302},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PENTAGI_API_DISCOVERY_GUARD_URL", "")
+			if tc.status != 0 {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Location", "http://127.0.0.1:1/never-follow")
+					w.WriteHeader(tc.status)
+					fmt.Fprint(w, tc.response)
+				}))
+				defer server.Close()
+				t.Setenv("PENTAGI_API_DISCOVERY_GUARD_URL", server.URL)
+			}
+			executor := &apiDiscoveryTestExecutor{}
+			got := discoverAPIDocumentation(context.Background(), executor, "Assess API http://outside.test:8000")
+			if len(executor.inputs) != 0 {
+				t.Fatalf("guard bypass: %d executor calls", len(executor.inputs))
+			}
+			if !strings.Contains(got, "not authorized") {
+				t.Fatalf("missing explicit authorization failure: %s", got)
+			}
+		})
 	}
 }
