@@ -66,6 +66,24 @@ class FixtureAuthenticationGuardTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIsNotNone(guard.command_risk(command, set()))
 
+    def test_searcher_handoff_tools_are_removed_and_blocked(self):
+        names = ("search", "search_answer", "search_result", "search_in_memory", "graphiti_search")
+        request = {"tools": [
+            {"type": "function", "function": {"name": name, "parameters": {"type": "object"}}}
+            for name in names
+        ]}
+        filtered, removed = guard.restrict_request_tools(request)
+        self.assertEqual(filtered["tools"], [])
+        self.assertEqual(set(removed), set(names))
+        for name in names:
+            forwarded, events = guard.guard_response({
+                "choices": [{"message": {"tool_calls": [{
+                    "id": "blocked-search", "type": "function",
+                    "function": {"name": name, "arguments": "{}"},
+                }]}}]
+            })
+            self.assertTrue(guard.prohibited_tool_events(events))
+
 
 if __name__ == "__main__":
     unittest.main()
