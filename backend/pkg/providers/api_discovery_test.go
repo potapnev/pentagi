@@ -156,3 +156,22 @@ func TestDiscoverAPIDocumentationRejectsCrossOriginLinkAndPolicyOutput(t *testin
 		t.Fatalf("cross-origin documentation URL was requested: %#v", executor.inputs)
 	}
 }
+
+func TestDiscoverAPIDocumentationRejectsOpenAPIFromNon2xxHTTP(t *testing.T) {
+	// A curl exit status of zero proves transport execution, not HTTP success.
+	// The real discovery path must reject an OpenAPI-looking body on HTTP 403.
+	executor := &apiDiscoveryTestExecutor{outputs: []string{
+		"HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\n\r\n" +
+			`{"openapi":"3.0.0","paths":{"/unverified":{"get":{}}}}` +
+			"\n[exit code: 0]",
+	}}
+	got := discoverAPIDocumentation(context.Background(), executor,
+		"Assess this REST API at http://authorized.test:8000.")
+	if strings.Contains(got, "Documented operations") ||
+		strings.Contains(got, "GET /unverified") {
+		t.Fatalf("non-2xx HTTP response was promoted into trusted routes: %s", got)
+	}
+	if !strings.Contains(got, "HTTP 403") {
+		t.Fatalf("missing observed HTTP error status in discovery context: %s", got)
+	}
+}
