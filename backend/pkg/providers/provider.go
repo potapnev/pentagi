@@ -164,9 +164,10 @@ type flowProvider struct {
 
 	summarizerCache *lru.Cache[[32]byte, string]
 
-	maxGACallsLimit int
-	maxLACallsLimit int
-	buildMonitor    executionMonitorBuilder
+	maxGACallsLimit            int
+	maxLACallsLimit            int
+	maxSearcherAgentIterations int
+	buildMonitor               executionMonitorBuilder
 
 	provider.Provider
 }

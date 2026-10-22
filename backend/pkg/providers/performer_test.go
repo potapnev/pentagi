@@ -1074,3 +1074,213 @@ func TestPerformer_PerformAgentChain_WritesAMissingScopeToGraphitiAsADash(t *tes
 		})
 	}
 }
+
+func TestAgentChainIterationLimit_CapsSearcherWithoutReducingSecurityAgents(t *testing.T) {
+	tests := []struct {
+		name          string
+		agent         pconfig.ProviderOptionsType
+		generalLimit  int
+		limitedLimit  int
+		searcherLimit int
+		want          int
+	}{
+		{name: "searcher uses its dedicated cap", agent: pconfig.OptionsTypeSearcher, generalLimit: 100, limitedLimit: 20, searcherLimit: 12, want: 12},
+		{name: "explicit searcher override is honored", agent: pconfig.OptionsTypeSearcher, generalLimit: 100, limitedLimit: 30, searcherLimit: 8, want: 8},
+		{name: "zero falls back to the limited-agent cap", agent: pconfig.OptionsTypeSearcher, generalLimit: 100, limitedLimit: 20, searcherLimit: 0, want: 20},
+		{name: "searcher keeps enough room for shutdown", agent: pconfig.OptionsTypeSearcher, generalLimit: 100, limitedLimit: 20, searcherLimit: 1, want: maxAgentShutdownIterations * 2},
+		{name: "primary retains general limit", agent: pconfig.OptionsTypePrimaryAgent, generalLimit: 100, limitedLimit: 20, searcherLimit: 12, want: 100},
+		{name: "pentester retains general limit", agent: pconfig.OptionsTypePentester, generalLimit: 100, limitedLimit: 20, searcherLimit: 12, want: 100},
+		{name: "other limited agents retain limited cap", agent: pconfig.OptionsTypeRefiner, generalLimit: 100, limitedLimit: 20, searcherLimit: 12, want: 20},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := agentChainIterationLimit(tt.agent, tt.generalLimit, tt.limitedLimit, tt.searcherLimit)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+type performerScriptedProvider struct {
+	*mock.Provider
+	responses map[pconfig.ProviderOptionsType][]*llms.ContentResponse
+	calls     map[pconfig.ProviderOptionsType]int
+	chains    map[pconfig.ProviderOptionsType][][]llms.MessageContent
+}
+
+func (p *performerScriptedProvider) CallWithTools(
+	ctx context.Context,
+	opt pconfig.ProviderOptionsType,
+	chain []llms.MessageContent,
+	_ []llms.Tool,
+	_ streaming.Callback,
+) (*llms.ContentResponse, error) {
+	p.calls[opt]++
+	p.chains[opt] = append(p.chains[opt], slices.Clone(chain))
+	responses := p.responses[opt]
+	if len(responses) == 0 {
+		return nil, fmt.Errorf("no scripted response for %s", opt)
+	}
+	p.responses[opt] = responses[1:]
+	return responses[0], nil
+}
+
+type performerSearcherResultExecutor struct {
+	result     string
+	storeCalls int
+}
+
+func (e *performerSearcherResultExecutor) Tools() []llms.Tool {
+	return []llms.Tool{
+		{Type: "function", Function: &llms.FunctionDefinition{Name: tools.StoreAnswerToolName}},
+		{Type: "function", Function: &llms.FunctionDefinition{Name: tools.SearchResultToolName}},
+	}
+}
+
+func (*performerSearcherResultExecutor) GetBarrierToolNames() []string {
+	return []string{tools.SearchResultToolName}
+}
+
+func (*performerSearcherResultExecutor) GetBarrierTools() []tools.FunctionInfo { return nil }
+
+func (e *performerSearcherResultExecutor) GetToolSchema(string) (*schema.Schema, error) {
+	return nil, nil
+}
+
+func (e *performerSearcherResultExecutor) Execute(
+	_ context.Context, _ int64, _, name, _, _ string, args json.RawMessage,
+) (string, error) {
+	if name == tools.StoreAnswerToolName {
+		e.storeCalls++
+		return "stored useful research", nil
+	}
+	if name != tools.SearchResultToolName {
+		return "", fmt.Errorf("unexpected Searcher tool: %s", name)
+	}
+	var result tools.SearchResult
+	if err := json.Unmarshal(args, &result); err != nil {
+		return "", err
+	}
+	e.result = result.Result
+	return "search result accepted", nil
+}
+
+func (e *performerSearcherResultExecutor) IsBarrierFunction(name string) bool {
+	return name == tools.SearchResultToolName
+}
+
+func (*performerSearcherResultExecutor) IsFunctionExists(name string) bool {
+	return name == tools.StoreAnswerToolName || name == tools.SearchResultToolName
+}
+
+type performerSearchDelegationExecutor struct {
+	fp               *flowProvider
+	searcherExecutor *performerSearcherResultExecutor
+	pentesterCalled  bool
+	doneCalled       bool
+}
+
+func (*performerSearchDelegationExecutor) GetBarrierToolNames() []string {
+	return []string{tools.FinalyToolName}
+}
+
+func (*performerSearchDelegationExecutor) GetBarrierTools() []tools.FunctionInfo { return nil }
+
+func (*performerSearchDelegationExecutor) GetToolSchema(string) (*schema.Schema, error) {
+	return nil, nil
+}
+
+func (*performerSearchDelegationExecutor) Tools() []llms.Tool {
+	return []llms.Tool{
+		{Type: "function", Function: &llms.FunctionDefinition{Name: tools.SearchToolName}},
+		{Type: "function", Function: &llms.FunctionDefinition{Name: tools.PentesterToolName}},
+		{Type: "function", Function: &llms.FunctionDefinition{Name: tools.FinalyToolName}},
+	}
+}
+
+func (e *performerSearchDelegationExecutor) Execute(
+	ctx context.Context, _ int64, _, name, _, _ string, _ json.RawMessage,
+) (string, error) {
+	switch name {
+	case tools.SearchToolName:
+		err := e.fp.performAgentChain(
+			ctx,
+			pconfig.OptionsTypeSearcher,
+			2,
+			nil,
+			nil,
+			[]llms.MessageContent{llms.TextParts(llms.ChatMessageTypeHuman, "Perform bounded authorized research")},
+			e.searcherExecutor,
+			nil,
+		)
+		return e.searcherExecutor.result, err
+	case tools.PentesterToolName:
+		e.pentesterCalled = true
+		return "authorized security checks remain available", nil
+	case tools.FinalyToolName:
+		e.doneCalled = true
+		return "task closed", nil
+	default:
+		return "", fmt.Errorf("unexpected Primary tool: %s", name)
+	}
+}
+
+func (e *performerSearchDelegationExecutor) IsBarrierFunction(name string) bool {
+	return name == tools.FinalyToolName
+}
+
+func (e *performerSearchDelegationExecutor) IsFunctionExists(name string) bool {
+	return name == tools.SearchToolName || name == tools.PentesterToolName || name == tools.FinalyToolName
+}
+
+func performerToolCallResponse(name, args string) *llms.ContentResponse {
+	return &llms.ContentResponse{Choices: []*llms.ContentChoice{{ToolCalls: []llms.ToolCall{{
+		ID: "call_1", Type: "function", FunctionCall: &llms.FunctionCall{Name: name, Arguments: args},
+	}}}}}
+}
+
+func TestPerformer_SearcherBudgetReturnsUsefulResearchAndKeepsPentesterEligible(t *testing.T) {
+	searchResult := "Relevant research found; authenticated security checks remain unperformed."
+	primarySteps := []*llms.ContentResponse{
+		performerToolCallResponse(tools.SearchToolName, `{"question":"Find relevant context","message":"Checking relevant context."}`),
+		performerToolCallResponse(tools.PentesterToolName, `{"question":"Perform the remaining authorized security checks","message":"Passing the unfinished checks to Pentester."}`),
+		performerToolCallResponse(tools.FinalyToolName, `{}`),
+	}
+	searcherSteps := make([]*llms.ContentResponse, 0, 6)
+	for i := range 5 {
+		args := fmt.Sprintf(`{"answer":"useful context %d","question":"security context %d"}`, i, i)
+		searcherSteps = append(searcherSteps, performerToolCallResponse(tools.StoreAnswerToolName, args))
+	}
+	searcherSteps = append(searcherSteps, performerToolCallResponse(tools.SearchResultToolName,
+		`{"result":"`+searchResult+`","message":"Returning bounded research."}`))
+	prv := &performerScriptedProvider{
+		Provider: mock.NewProvider(provider.ProviderOpenAI, "openai", "gpt-5.6-sol"),
+		responses: map[pconfig.ProviderOptionsType][]*llms.ContentResponse{
+			pconfig.OptionsTypePrimaryAgent: primarySteps,
+			pconfig.OptionsTypeSearcher:     searcherSteps,
+		},
+		calls:  map[pconfig.ProviderOptionsType]int{},
+		chains: map[pconfig.ProviderOptionsType][][]llms.MessageContent{},
+	}
+	fp := newFlowProvider()
+	fp.db = &performerScopeQuerier{}
+	fp.Provider = prv
+	fp.prompter = templates.NewDefaultPrompter()
+	fp.maxGACallsLimit = 100
+	fp.maxLACallsLimit = 30
+	fp.maxSearcherAgentIterations = 8
+	searcher := &performerSearcherResultExecutor{}
+	primary := &performerSearchDelegationExecutor{fp: fp, searcherExecutor: searcher}
+
+	err := fp.performAgentChain(context.Background(), pconfig.OptionsTypePrimaryAgent, 1, nil, nil,
+		[]llms.MessageContent{llms.TextParts(llms.ChatMessageTypeHuman, "Assess the authorized target")}, primary, nil)
+	require.NoError(t, err)
+	assert.Equal(t, searchResult, searcher.result, "the Searcher result must return through its result barrier")
+	assert.Equal(t, 5, searcher.storeCalls, "the dedicated Searcher ceiling preserves bounded useful research")
+	assert.Equal(t, 6, prv.calls[pconfig.OptionsTypeSearcher], "five research turns plus one graceful result submission")
+	require.GreaterOrEqual(t, len(prv.chains[pconfig.OptionsTypePrimaryAgent]), 2)
+	primaryContinuation := fmt.Sprint(prv.chains[pconfig.OptionsTypePrimaryAgent][1])
+	assert.Contains(t, primaryContinuation, searchResult, "Primary receives the useful Searcher result")
+	assert.True(t, primary.pentesterCalled, "unfinished security checks remain eligible after Searcher returns")
+	assert.True(t, primary.doneCalled, "the scripted workflow ends only after Pentester delegation")
+}

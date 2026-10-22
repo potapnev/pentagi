@@ -24,12 +24,13 @@ import (
 
 func newFlowProvider() *flowProvider {
 	return &flowProvider{
-		mx:              &sync.RWMutex{},
-		cfg:             &config.Config{DataDir: "testdata"},
-		summarizerCache: newSummarizerCache(),
-		callCounter:     &atomic.Int64{},
-		maxGACallsLimit: maxGeneralAgentChainIterations,
-		maxLACallsLimit: maxLimitedAgentChainIterations,
+		mx:                         &sync.RWMutex{},
+		cfg:                        &config.Config{DataDir: "testdata"},
+		summarizerCache:            newSummarizerCache(),
+		callCounter:                &atomic.Int64{},
+		maxGACallsLimit:            maxGeneralAgentChainIterations,
+		maxLACallsLimit:            maxLimitedAgentChainIterations,
+		maxSearcherAgentIterations: defaultMaxSearcherAgentIterations,
 		buildMonitor: func() *executionMonitor {
 			return &executionMonitor{
 				enabled: false,

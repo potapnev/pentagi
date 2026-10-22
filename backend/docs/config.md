@@ -2012,6 +2012,7 @@ These settings control the agent supervision system, including execution monitor
 | ExecutionMonitorTotalToolLimit | `EXECUTION_MONITOR_TOTAL_TOOL_LIMIT`| `10`          | Threshold for total tool calls before mentor review                    |
 | MaxGeneralAgentToolCalls       | `MAX_GENERAL_AGENT_TOOL_CALLS`      | `100`         | Maximum tool calls for general agents (Assistant, Primary, Pentester, Coder, Installer) |
 | MaxLimitedAgentToolCalls       | `MAX_LIMITED_AGENT_TOOL_CALLS`      | `20`          | Maximum tool calls for limited agents (Searcher, Enricher, etc.)       |
+| MaxSearcherAgentIterations     | `MAX_SEARCHER_AGENT_ITERATIONS`    | `12`          | Searcher model-call ceiling, including up to three graceful-shutdown iterations; values below `6` are raised to `6`; `0` falls back to the limited-agent ceiling |
 | AgentPlanningStepEnabled       | `AGENT_PLANNING_STEP_ENABLED`       | `false`       | Enable automatic task planning for specialist agents                   |
 
 ### Usage Details

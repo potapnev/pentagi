@@ -313,8 +313,9 @@ type Config struct {
 	ExecutionMonitorTotalToolLimit int  `env:"EXECUTION_MONITOR_TOTAL_TOOL_LIMIT" envDefault:"10"`
 
 	// === Agent Tool Execution Limits ===
-	MaxGeneralAgentToolCalls int `env:"MAX_GENERAL_AGENT_TOOL_CALLS" envDefault:"100"`
-	MaxLimitedAgentToolCalls int `env:"MAX_LIMITED_AGENT_TOOL_CALLS" envDefault:"20"`
+	MaxGeneralAgentToolCalls   int `env:"MAX_GENERAL_AGENT_TOOL_CALLS" envDefault:"100"`
+	MaxLimitedAgentToolCalls   int `env:"MAX_LIMITED_AGENT_TOOL_CALLS" envDefault:"20"`
+	MaxSearcherAgentIterations int `env:"MAX_SEARCHER_AGENT_ITERATIONS" envDefault:"12"`
 
 	// === Agent Planning Phase Configuration ===
 	AgentPlanningStepEnabled bool `env:"AGENT_PLANNING_STEP_ENABLED" envDefault:"false"`

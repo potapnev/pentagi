@@ -165,7 +165,7 @@ func clearConfigEnv(t *testing.T) {
 		"OTEL_HOST", "LANGFUSE_BASE_URL", "LANGFUSE_PROJECT_ID", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY",
 		"GRAPHITI_ENABLED", "GRAPHITI_TIMEOUT", "GRAPHITI_URL",
 		"EXECUTION_MONITOR_ENABLED", "EXECUTION_MONITOR_SAME_TOOL_LIMIT", "EXECUTION_MONITOR_TOTAL_TOOL_LIMIT",
-		"MAX_GENERAL_AGENT_TOOL_CALLS", "MAX_LIMITED_AGENT_TOOL_CALLS",
+		"MAX_GENERAL_AGENT_TOOL_CALLS", "MAX_LIMITED_AGENT_TOOL_CALLS", "MAX_SEARCHER_AGENT_ITERATIONS",
 		"AGENT_PLANNING_STEP_ENABLED",
 	}
 	for _, v := range envVars {
@@ -235,6 +235,7 @@ func TestConfig_NewConfig_FillsDefaultsForAnEmptyEnvironment(t *testing.T) {
 	assert.Equal(t, 10, config.ExecutionMonitorTotalToolLimit)
 	assert.Equal(t, 100, config.MaxGeneralAgentToolCalls)
 	assert.Equal(t, 20, config.MaxLimitedAgentToolCalls)
+	assert.Equal(t, 12, config.MaxSearcherAgentIterations)
 	assert.Equal(t, false, config.AgentPlanningStepEnabled)
 }
 
@@ -255,6 +256,7 @@ func TestConfig_NewConfig_ReadsTheEnvironment(t *testing.T) {
 			"EXECUTION_MONITOR_TOTAL_TOOL_LIMIT": "15",
 			"MAX_GENERAL_AGENT_TOOL_CALLS":       "150",
 			"MAX_LIMITED_AGENT_TOOL_CALLS":       "30",
+			"MAX_SEARCHER_AGENT_ITERATIONS":      "8",
 			"AGENT_PLANNING_STEP_ENABLED":        "true",
 		} {
 			t.Setenv(name, value)
@@ -277,6 +279,7 @@ func TestConfig_NewConfig_ReadsTheEnvironment(t *testing.T) {
 		assert.Equal(t, 15, config.ExecutionMonitorTotalToolLimit)
 		assert.Equal(t, 150, config.MaxGeneralAgentToolCalls)
 		assert.Equal(t, 30, config.MaxLimitedAgentToolCalls)
+		assert.Equal(t, 8, config.MaxSearcherAgentIterations)
 		assert.Equal(t, true, config.AgentPlanningStepEnabled)
 	})
 

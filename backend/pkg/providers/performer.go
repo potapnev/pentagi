@@ -32,13 +32,14 @@ const (
 	maxRetriesToCallFunction    = 3
 	// repeatEchoLimit caps the previous tool answer quoted back on a repeat, so
 	// echoing it cannot re-inflate a chain that is already being summarized.
-	repeatEchoLimit                = 4096
-	maxReflectorCallsPerChain      = 3
-	maxGeneralAgentChainIterations = 100
-	maxLimitedAgentChainIterations = 20
-	maxAgentShutdownIterations     = 3
-	maxSoftDetectionsBeforeAbort   = 4
-	delayBetweenRetries            = 5 * time.Second
+	repeatEchoLimit                   = 4096
+	maxReflectorCallsPerChain         = 3
+	maxGeneralAgentChainIterations    = 100
+	maxLimitedAgentChainIterations    = 20
+	defaultMaxSearcherAgentIterations = 12
+	maxAgentShutdownIterations        = 3
+	maxSoftDetectionsBeforeAbort      = 4
+	delayBetweenRetries               = 5 * time.Second
 )
 
 // ErrAgentModelCall marks failures while obtaining a usable model response.
@@ -96,22 +97,9 @@ func (fp *flowProvider) performAgentChain(
 	groupID := fp.cfg.GroupID(fp.flowID)
 	toolTypeMapping := tools.GetToolTypeMapping()
 
-	var maxCallsLimit int
-	switch optAgentType {
-	case pconfig.OptionsTypeAssistant, pconfig.OptionsTypePrimaryAgent,
-		pconfig.OptionsTypePentester, pconfig.OptionsTypeCoder, pconfig.OptionsTypeInstaller:
-		if fp.maxGACallsLimit <= 0 {
-			maxCallsLimit = maxGeneralAgentChainIterations
-		} else {
-			maxCallsLimit = max(fp.maxGACallsLimit, maxAgentShutdownIterations*2)
-		}
-	default:
-		if fp.maxLACallsLimit <= 0 {
-			maxCallsLimit = maxLimitedAgentChainIterations
-		} else {
-			maxCallsLimit = max(fp.maxLACallsLimit, maxAgentShutdownIterations*2)
-		}
-	}
+	maxCallsLimit := agentChainIterationLimit(
+		optAgentType, fp.maxGACallsLimit, fp.maxLACallsLimit, fp.maxSearcherAgentIterations,
+	)
 
 	for iteration := 0; ; iteration++ {
 		if iteration >= maxCallsLimit {
@@ -276,6 +264,35 @@ func (fp *flowProvider) performAgentChain(
 				return err
 			}
 		}
+	}
+}
+
+func agentChainIterationLimit(
+	agent pconfig.ProviderOptionsType,
+	generalLimit, limitedLimit, searcherLimit int,
+) int {
+	if agent == pconfig.OptionsTypeSearcher {
+		if searcherLimit <= 0 {
+			searcherLimit = limitedLimit
+		}
+		if searcherLimit <= 0 {
+			searcherLimit = defaultMaxSearcherAgentIterations
+		}
+		return max(searcherLimit, maxAgentShutdownIterations*2)
+	}
+
+	switch agent {
+	case pconfig.OptionsTypeAssistant, pconfig.OptionsTypePrimaryAgent,
+		pconfig.OptionsTypePentester, pconfig.OptionsTypeCoder, pconfig.OptionsTypeInstaller:
+		if generalLimit <= 0 {
+			return maxGeneralAgentChainIterations
+		}
+		return max(generalLimit, maxAgentShutdownIterations*2)
+	default:
+		if limitedLimit <= 0 {
+			return maxLimitedAgentChainIterations
+		}
+		return max(limitedLimit, maxAgentShutdownIterations*2)
 	}
 }
 
