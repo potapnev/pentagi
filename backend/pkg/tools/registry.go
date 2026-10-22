@@ -177,7 +177,9 @@ var registryDefinitions = map[string]llms.FunctionDefinition{
 		Description: "Calls a terminal command in blocking mode. " +
 			"Use timeout=0 or a negative value to apply the configured server default timeout. " +
 			"Explicit positive values are accepted up to 10800 seconds (3 hours); values outside this range are replaced by the server default. " +
-			"Only one command can be executed at a time",
+			"Only one command can be executed at a time. For HTTP, discover exact paths and methods from target documentation; " +
+			"prefer `curl -sS -i` to capture the actual HTTP status, and never infer status from the body. " +
+			"A policy-blocked action was not executed and is not evidence. Do not retry a blocked request using another executable or shell interpreter.",
 		Parameters: reflector.Reflect(&TerminalAction{}),
 	},
 	FileToolName: {

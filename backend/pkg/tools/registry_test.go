@@ -2,10 +2,27 @@ package tools
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"pentagi/pkg/database"
 )
+
+func TestRegistry_TerminalToolDocumentsScopedHTTPBehavior(t *testing.T) {
+	t.Parallel()
+
+	description := GetRegistryDefinitions()[TerminalToolName].Description
+	for _, phrase := range []string{
+		"discover exact paths and methods from target documentation",
+		"prefer `curl -sS -i` to capture the actual HTTP status",
+		"A policy-blocked action was not executed and is not evidence",
+		"Do not retry a blocked request using another executable or shell interpreter",
+	} {
+		if !strings.Contains(description, phrase) {
+			t.Errorf("terminal tool description is missing %q", phrase)
+		}
+	}
+}
 
 func TestRegistry_ToolType_StringNamesEveryType(t *testing.T) {
 	t.Parallel()
