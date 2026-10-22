@@ -43,3 +43,31 @@ ledger. A fresh directory, input limit of 30,000, and explicit runtime limits ar
 required for the bounded runtime acceptance. Runtime evidence and deployment
 configuration remain private in the lab assessment directory. Production, flow
 87, previous ledgers, and historical branches are preserved.
+
+## Bounded live acceptance
+
+PASS on 2026-10-22, A3 flow 8/task 6/subtask 6. After a 300-second idle gate
+(61 samples), the configured `{r:32:x}` template validated against three real
+Qwen collector IDs in one generation: 594 input tokens (79 cached), 78 output.
+Startup through calibration used three generations, 1,281 input and 87 output.
+The complete run used eight generations, 19,078 input (415 cached), 921 output;
+limits were 30,000 input, ten generations and one model terminal action.
+
+Pentester was actually invoked and produced a response. Guarded automatic
+`GET /` and `GET /openapi.json` returned HTTP 200. Pentester selected
+`GET /api/v1/invoices`; the scoped guard allowed it and the genuine HTTP 401
+response persisted as PostgreSQL tool-call 19, with fixture-log corroboration.
+Terminal-log rows 26–31 cover all three requests. No authentication occurred.
+The operator stopped flow 8 immediately; it is waiting. The enclosing Pentester
+call is marked failed by cancellation; no final result/report is claimed.
+
+The optional model-selected documentation GET was not obtained. The remaining
+boundary is that the model selected a protected business route for an anonymous
+operation. Further authentication or workflow assessment is outside this run.
+The proxy is stopped and its ledger preserved. Historical ledgers and production
+containers/worker 87 are unchanged. Codex cumulative telemetry was unavailable.
+
+One launch correction happened before inference: rebuild the backend statically
+with `CGO_ENABLED=0` for the Alpine runtime. No image rebuild, inference retry,
+or budget reset occurred. The runtime binary was verified by SHA-256:
+`1a32723fe47c129a4e4d39f44cc87bab5ca90b8e9ba8c25ee716007ad6759a8a`.
