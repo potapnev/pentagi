@@ -90,8 +90,12 @@ func discoverAPIDocumentation(
 		for _, linked := range apiDocumentationLinks(root, requestURL, headers, body) {
 			appendCandidate(linked)
 		}
-		if routes, valid := parseOpenAPIJSON(body); valid {
-			return formatAPIDiscoveryContext(requestURL, status, routes)
+		// A successful curl process does not imply a successful HTTP response.
+		// Never promote API routes from 4xx/5xx response bodies.
+		if status >= 200 && status < 300 {
+			if routes, valid := parseOpenAPIJSON(body); valid {
+				return formatAPIDiscoveryContext(requestURL, status, routes)
+			}
 		}
 		if i == 0 {
 			// Prefer links published by the target response. Conventional
