@@ -12,6 +12,8 @@ Date: 2026-10-22
 - Image ID: `sha256:2173b8ed19b47057b0a311a092cc6c3bb0dcdd431d38b1b323e394edef3342ce`
 - Binary SHA-256: `6015077cb159081b42e19e96a5447d71b3217f02aae2d396ab4dc1829c60fe23`
 - Runtime used the Searcher-budget commit before the follow-up prompt addition. The final image includes both commits; the prompt addition has source-test verification only.
+- Build toolchain: `golang:1.26.5-bookworm@sha256:53eeac89074db483fdf0ab3be1df32bf6e47562263d2d0d6baa7f26acb4957dd`; base image: `vxcontrol/pentagi@sha256:64bd1802799142a12bc5eb23c15a1ccc50d3476736d3d2a98a9b773910283a1e`.
+- Binary command: `CGO_ENABLED=0 go build -p 2 -trimpath -ldflags '-X pentagi/pkg/version.PackageName=pentagi -X pentagi/pkg/version.PackageVer=2.2.0 -X pentagi/pkg/version.PackageRev=63c113df -X pentagi/pkg/version.Edition=ce' -o /out/pentagi ./cmd/pentagi`. Image built with `docker build --network=none` from the pinned base and this binary.
 
 ## Root cause and correction
 
