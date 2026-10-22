@@ -16,6 +16,7 @@ import (
 var (
 	httpURLPattern    = regexp.MustCompile(`https?://[^\s<>"'\x60]+`)
 	apiHTTPStatusLine = regexp.MustCompile(`^HTTP/\d(?:\.\d)?\s+(\d{3})(?:\s|$)`)
+	terminalSGR       = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	exitCodeSuffix    = regexp.MustCompile(`\r?\n\[exit code: (\d+)\]$`)
 	hrefPattern       = regexp.MustCompile(`(?i)href\s*=\s*["']([^"']+)["']`)
 	linkPattern       = regexp.MustCompile(`(?i)<([^>]+)>\s*;\s*rel\s*=\s*["']?([^;"'\s]+)`)
@@ -186,12 +187,17 @@ func parseTerminalHTTPResponse(output string) (int, string, string, bool) {
 	if len(exitMatch) != 4 || output[exitMatch[2]:exitMatch[3]] != "0" {
 		return 0, "", "", false
 	}
-	output = output[:exitMatch[0]]
+	output = terminalSGR.ReplaceAllString(output[:exitMatch[0]], "")
+	// TerminalTool captures a PTY. Its line discipline can turn HTTP CRLF into
+	// CRCRLF, while curl may style headers with SGR escapes when stdout is a TTY.
+	// Normalize these presentation artifacts before parsing the HTTP boundary.
+	output = strings.ReplaceAll(output, "\r\r\n", "\n")
+	output = strings.ReplaceAll(output, "\r\n", "\n")
 	lineEnd := strings.Index(output, "\n")
 	if lineEnd < 0 {
 		return 0, "", "", false
 	}
-	firstLine := strings.TrimSuffix(output[:lineEnd], "\r")
+	firstLine := strings.TrimRight(output[:lineEnd], "\r")
 	match := apiHTTPStatusLine.FindStringSubmatch(firstLine)
 	if len(match) != 2 {
 		return 0, "", "", false
@@ -201,19 +207,11 @@ func parseTerminalHTTPResponse(output string) (int, string, string, bool) {
 		return 0, "", "", false
 	}
 	rest := output[lineEnd+1:]
-	separator, separatorLen := 0, 0
-	switch {
-	case strings.HasPrefix(rest, "\r\n"):
-		separatorLen = 2
-	case strings.HasPrefix(rest, "\n"):
+	separator := strings.Index(rest, "\n\n")
+	separatorLen := 2
+	if strings.HasPrefix(rest, "\n") {
+		separator = 0
 		separatorLen = 1
-	default:
-		separator = strings.Index(rest, "\r\n\r\n")
-		separatorLen = 4
-		if separator < 0 {
-			separator = strings.Index(rest, "\n\n")
-			separatorLen = 2
-		}
 	}
 	if separator < 0 || separatorLen == 0 {
 		return 0, "", "", false

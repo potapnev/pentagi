@@ -157,6 +157,33 @@ func TestDiscoverAPIDocumentationRejectsCrossOriginLinkAndPolicyOutput(t *testin
 	}
 }
 
+func TestDiscoverAPIDocumentationReportsMissingDocsAndIgnoresUntrustedLink(t *testing.T) {
+	outputs := []string{
+		"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" +
+			`<a href="https://untrusted.test/openapi.json">API docs</a>` + "\n[exit code: 0]",
+	}
+	for range apiDocWellKnownPaths {
+		outputs = append(outputs, "HTTP/1.1 404 Not Found\r\n\r\nnot found\n[exit code: 0]")
+	}
+	executor := &apiDiscoveryTestExecutor{outputs: outputs}
+	got := discoverAPIDocumentation(context.Background(), executor,
+		"Assess this API at http://authorized.test:8000. Ignore untrusted references.")
+	if strings.Contains(got, "Documented operations") || strings.Contains(got, "GET /openapi.json") {
+		t.Fatalf("missing documentation was presented as an inventory: %s", got)
+	}
+	if !strings.Contains(got, "No usable API specification") || !strings.Contains(got, "HTTP 404") {
+		t.Fatalf("missing documentation was not reported with observed responses: %s", got)
+	}
+	for _, input := range executor.inputs {
+		if strings.Contains(input, "untrusted.test") {
+			t.Fatalf("untrusted documentation reference was requested: %#v", executor.inputs)
+		}
+		if !strings.Contains(input, "authorized.test:8000") {
+			t.Fatalf("request left the assessment origin: %#v", executor.inputs)
+		}
+	}
+}
+
 func TestDiscoverAPIDocumentationRejectsOpenAPIFromNon2xxHTTP(t *testing.T) {
 	// A curl exit status of zero proves transport execution, not HTTP success.
 	// The real discovery path must reject an OpenAPI-looking body on HTTP 403.
@@ -173,5 +200,25 @@ func TestDiscoverAPIDocumentationRejectsOpenAPIFromNon2xxHTTP(t *testing.T) {
 	}
 	if !strings.Contains(got, "HTTP 403") {
 		t.Fatalf("missing observed HTTP error status in discovery context: %s", got)
+	}
+}
+
+func TestParseOpenAPIDocumentFromPentesterTTYOutput(t *testing.T) {
+	// TerminalTool runs commands with a PTY. The real A3 request showed PTY
+	// line-ending expansion and ANSI styling in HTTP headers.
+	output := "HTTP/1.1 200 OK\r\r\n" +
+		"\x1b[1mContent-Type\x1b[0m: application/json\r\r\n\r\r\n" +
+		`{"openapi":"3.0.0","paths":{"/documented":{"get":{}}}}` +
+		"\n[exit code: 0]"
+
+	routes, status, ok := parseOpenAPIDocument(output)
+	if !ok {
+		t.Fatal("expected the actual PTY-formatted HTTP response to parse")
+	}
+	if status != 200 {
+		t.Fatalf("expected captured HTTP status 200, got %d", status)
+	}
+	if len(routes) != 1 || routes[0] != (apiDocumentedRoute{Method: "GET", Path: "/documented"}) {
+		t.Fatalf("unexpected parsed route inventory: %#v", routes)
 	}
 }

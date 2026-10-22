@@ -42,3 +42,19 @@ The static binary launched from the image. Its network-disabled smoke invocation
 No fixture traffic was sent in this iteration; the previously exposed disposable fixture credential was not reused. Raw traces and credentials remain private and are not part of this branch.
 
 Production image `.8`, flow 87, production data, volumes, and networks were not modified. The source correction remains experimental; model behavior and end-to-end findings are unverified.
+
+## Deterministic A3 executor validation (2026-10-22)
+
+The status correction was fetched from `exp/pentagi-api-discovery-status-fix` and reviewed as two commits: `20c4d416` rejects OpenAPI-looking bodies on non-2xx responses, and `25371c4f` adds its HTTP 403 regression. The A3 Primary-to-Pentester trace confirms the delegated question contains the authorized root `http://pentagi-effectiveness-target:8000`; its earlier `/login` claim came from Searcher prose, with no genuine OpenAPI tool response before delegation.
+
+The live test exercised `NewFlowToolsExecutor` / `GetPentesterExecutor`, PentAGI's `customExecutor`, `TerminalTool`, and its Docker exec path against the existing A3 worker and fixture. It issued two read-only requests: target root and the published `/openapi.json`; both returned genuine HTTP 200. The OpenAPI response yielded six methods/paths, delivered into the planner and Pentester context. Tool-call and terminal-log provider writes were captured in the private mode-0600 artifact at `optimization/assessments/20261022-pentagi-api-discovery/private/real-app-discovery-test.json`. The integration test substitutes recorders for the controller's database-backed log writers, so this proves the executor and persistence-provider handoff, not insertion into the A3 database.
+
+The live output exposed PTY formatting (`CRCRLF` and ANSI SGR codes) that the discovery parser rejected. `api_discovery.go` now normalizes those presentation artifacts before validating the real status/header/body boundary. A regression built from that observed response failed before the parser correction and passed after it. Additional regressions cover HTTP 403 with an OpenAPI-looking body, blocked output, missing status, absent documentation, and cross-origin documentation links.
+
+Pinned full relevant suite passed from the repository root:
+
+```text
+go test -mod=readonly -p 2 ./pkg/providers ./pkg/tools ./pkg/controller ./pkg/config ./pkg/templates -count=1
+```
+
+The original filtered Qwen endpoint at `127.0.0.1:18104` timed out on a passive `/v1/models` request. No inference or five-minute idle window was run. The exposed disposable fixture credential was not sent; this validation used unauthenticated documentation GETs only. Model behavior, database-row persistence, `hack_result`, and final reporting remain unverified. No release image was rebuilt; production `.8`, flow 87, and production data remain unchanged.
