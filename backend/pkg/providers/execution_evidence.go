@@ -162,6 +162,9 @@ func hasSuccessfulHTTPStatus(result string) bool {
 
 func terminalHTTPRequest(command string) (string, string, bool) {
 	trimmed := strings.TrimSpace(command)
+	// PentAGI's terminal wrapper appends this fixed descriptor merge so stderr
+	// joins the captured stdout result. It does not add another request.
+	trimmed = strings.TrimSuffix(trimmed, " 2>&1")
 	if !strings.HasPrefix(trimmed, "curl ") || strings.ContainsAny(trimmed, "\n\r|;&`$<>\\") ||
 		regexp.MustCompile(`(?:^|\s)(?:-L|--location|--config|-K)(?:\s|=|$)`).MatchString(trimmed) {
 		return "", "", false

@@ -95,3 +95,10 @@ func TestTerminalExecutionEvidenceKeepsRequestResponseAssociation(t *testing.T) 
 	require.NotContains(t, summaryInput, "super-secret")
 	require.NotContains(t, summaryInput, "nested-secret")
 }
+
+func TestTerminalHTTPRequestAcceptsCombinedOutputRedirect(t *testing.T) {
+	method, requestURL, ok := terminalHTTPRequest(`curl -s http://fixture.invalid/api/invoices/INV-1002 -H 'Authorization: Bearer test-token' 2>&1`)
+	require.True(t, ok)
+	require.Equal(t, "GET", method)
+	require.Equal(t, "http://fixture.invalid/api/invoices/INV-1002", requestURL)
+}
