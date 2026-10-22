@@ -26,10 +26,11 @@ PROHIBITED_EXTERNAL_TOOLS = {
 }
 SAFE_SCOPED_TOOLS = {
     # PentAGI tool-call ID discovery probe; consumed inside the provider and never executed as a target tool.
-    "done", "ask", "pentester", "hack_result", "report_result", "report_task_result",
+    "done", "ask", "pentester", "search", "hack_result", "report_result", "report_task_result",
     "subtask_list", "subtask_patch", "get_flow_status", "stop_flow", "wait_flow_completion",
-    "submit_flow_input", "patch_flow_subtasks", "terminal", "file",
-    "code_result", "maintenance_result", "memorist_result", "enricher_result",
+    "submit_flow_input", "patch_flow_subtasks", "terminal", "file", "search_in_memory",
+    "search_guide", "store_guide", "search_answer", "store_answer", "graphiti_search",
+    "code_result", "maintenance_result", "memorist_result", "enricher_result", "search_result",
 }
 PROHIBITED_TOOL_REASONS = {"external_tool_prohibited_by_scope", "unknown_tool_prohibited_by_scope"}
 FIXTURE_PASSWORD_HASHES = {
