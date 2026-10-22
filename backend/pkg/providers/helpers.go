@@ -414,6 +414,11 @@ func (fp *flowProvider) getTaskMsgLogsSummary(
 	if err != nil {
 		return "", wrapErrorEndEvaluatorSpan(ctx, evaluator, "failed to get task msg logs", err)
 	}
+	toolCalls, err := fp.db.GetFlowToolcalls(ctx, fp.flowID)
+	if err != nil {
+		return "", wrapErrorEndEvaluatorSpan(ctx, evaluator, "failed to get task tool calls", err)
+	}
+	msgLogs = associateTerminalToolcalls(msgLogs, toolCalls, taskID)
 
 	if len(msgLogs) == 0 {
 		evaluator.End(
