@@ -560,12 +560,17 @@ func (fp *flowProvider) GetTaskResult(ctx context.Context, taskID int64) (*tools
 	}
 
 	subtasksInfo := fp.getSubtasksInfo(taskID, tasksInfo.Subtasks)
+	reportTask := sanitizeTaskForReport(tasksInfo.Task)
+	reportTasks := make([]database.Task, len(tasksInfo.Tasks))
+	for i := range tasksInfo.Tasks {
+		reportTasks[i] = sanitizeTaskForReport(tasksInfo.Tasks[i])
+	}
 	reporterContext := map[string]map[string]any{
 		"user": {
-			"Task":              tasksInfo.Task,
-			"Tasks":             tasksInfo.Tasks,
-			"CompletedSubtasks": subtasksInfo.Completed,
-			"PlannedSubtasks":   subtasksInfo.Planned,
+			"Task":              reportTask,
+			"Tasks":             reportTasks,
+			"CompletedSubtasks": sanitizeSubtasksForReport(subtasksInfo.Completed),
+			"PlannedSubtasks":   sanitizeSubtasksForReport(subtasksInfo.Planned),
 		},
 		"system": {
 			"ReportResultToolName":    tools.ReportResultToolName,
@@ -602,7 +607,7 @@ func (fp *flowProvider) GetTaskResult(ctx context.Context, taskID int64) (*tools
 			return nil, wrapErrorEndEvaluatorSpan(ctx, reporterEvaluator, "failed to prepare execution state", err)
 		}
 
-		reporterContext["user"]["ExecutionState"] = executionState
+		reporterContext["user"]["ExecutionState"] = sanitizeReportText(executionState)
 		reporterTmpl, err = fp.prompter.RenderTemplate(templates.PromptTypeTaskReporter, reporterContext["user"])
 		if err != nil {
 			return nil, wrapErrorEndEvaluatorSpan(ctx, reporterEvaluator, "failed to get task reporter template (2)", err)
@@ -614,7 +619,7 @@ func (fp *flowProvider) GetTaskResult(ctx context.Context, taskID int64) (*tools
 				return nil, wrapErrorEndEvaluatorSpan(ctx, reporterEvaluator, "failed to get task msg logs summary", err)
 			}
 
-			reporterContext["user"]["ExecutionLogs"] = msgLogsSummary
+			reporterContext["user"]["ExecutionLogs"] = sanitizeReportText(msgLogsSummary)
 			reporterTmpl, err = fp.prompter.RenderTemplate(templates.PromptTypeTaskReporter, reporterContext["user"])
 			if err != nil {
 				return nil, wrapErrorEndEvaluatorSpan(ctx, reporterEvaluator, "failed to get task reporter template (3)", err)
@@ -627,7 +632,7 @@ func (fp *flowProvider) GetTaskResult(ctx context.Context, taskID int64) (*tools
 		return nil, wrapErrorEndEvaluatorSpan(ctx, reporterEvaluator, "failed to get task system reporter template", err)
 	}
 
-	result, err := fp.performTaskResultReporter(ctx, &taskID, nil, systemReporterTmpl, reporterTmpl, tasksInfo.Task.Input)
+	result, err := fp.performTaskResultReporter(ctx, &taskID, nil, systemReporterTmpl, reporterTmpl, reportTask.Input)
 	if err != nil {
 		return nil, wrapErrorEndEvaluatorSpan(ctx, reporterEvaluator, "failed to perform task result reporter", err)
 	}
