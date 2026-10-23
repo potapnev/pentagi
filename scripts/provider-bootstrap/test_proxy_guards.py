@@ -27,6 +27,12 @@ class ProxyGuardTest(unittest.TestCase):
         with patch.dict(os.environ, {"GENERATION_LIMIT": "12"}, clear=True):
             self.assertEqual(configured_limit("GENERATION_LIMIT", 10), 12)
 
+    def test_budget_ledger_records_generation_limit(self):
+        namespace = load_functions("initial_state")
+        namespace.update({"GENERATION_LIMIT": 16, "INPUT_LIMIT": 80000,
+                          "TARGET_LIMIT": 5, "WALL_LIMIT": 600, "MODE": "baseline"})
+        self.assertEqual(namespace["initial_state"]()["generation_limit"], 16)
+
     def test_marker_gate_allows_only_marked_flow_or_exact_calibration(self):
         funcs = load_functions("assessment_request_allowed")
         allowed = funcs["assessment_request_allowed"]

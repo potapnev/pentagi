@@ -123,7 +123,7 @@ def apply_frozen_plan(body):
     return body,None
 
 def initial_state():
-    return {'status':'running','input_tokens_used':0,'target_calls':0,'generations':0,'blocked_actions':0,'login_attempts':[],'input_limit':INPUT_LIMIT,'target_limit':TARGET_LIMIT,'wall_seconds_limit':WALL_LIMIT,'order_mode':MODE,'tool_guard':'scanner_guard.py'}
+    return {'status':'running','input_tokens_used':0,'target_calls':0,'generations':0,'blocked_actions':0,'login_attempts':[],'input_limit':INPUT_LIMIT,'target_limit':TARGET_LIMIT,'wall_seconds_limit':WALL_LIMIT,'generation_limit':GENERATION_LIMIT,'order_mode':MODE,'tool_guard':'scanner_guard.py'}
 if STATE.exists():
     raise RuntimeError("refusing to overwrite an existing inference ledger")
 save(STATE,initial_state())
