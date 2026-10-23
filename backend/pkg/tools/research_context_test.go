@@ -110,3 +110,15 @@ func TestRedactCredentialsFromResearchContextMasksPrefixedSecretAssignments(t *t
 		}
 	}
 }
+
+func TestRedactCredentialsFromResearchContextMasksWhitespaceSeparatedAccountFields(t *testing.T) {
+	input := `Disposable test accounts:
+- Alice: username alice, password Alpha-Secret-71!
+- Bob: username bob, password Beta-Secret-82!`
+	got := RedactCredentialsFromResearchContext(input)
+	for _, secret := range []string{"username alice", "username bob", "Alpha-Secret-71!", "Beta-Secret-82!"} {
+		if strings.Contains(got, secret) {
+			t.Errorf("research context exposed credential %q: %q", secret, got)
+		}
+	}
+}

@@ -12,7 +12,7 @@ var (
 	researchBareTarget        = regexp.MustCompile(`(?i)^[a-z0-9.-]+\.[a-z]{2,}(?::[0-9]+)?(?:/|$)`)
 	researchURL               = regexp.MustCompile(`(?i)https?://[^\s,;)]+`)
 	researchAuthHeader        = regexp.MustCompile(`(?i)(\bauthorization\s*:\s*)[^\r\n]+`)
-	researchSecretAssignment  = regexp.MustCompile(`(?i)(\b[A-Za-z0-9_]*(?:password|passwd|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|secret|bearer)\s*[:=]\s*)[^\s,;]+`)
+	researchSecretAssignment  = regexp.MustCompile(`(?i)(\b[A-Za-z0-9_]*(?:password|passwd|passcode|username|user|email|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|secret|bearer)\s*(?:[:=]\s*|\s+))[^\s,;]+`)
 	researchCurlUser          = regexp.MustCompile(`(?i)((?:curl\s+[^\r\n]*?\s)?(?:--user|-u)\s+['"]?[^:'"\s]+:)[^'"\s]+`)
 )
 
