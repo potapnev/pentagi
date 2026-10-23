@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -708,7 +709,17 @@ func (fp *flowProvider) performPentester(
 		)
 	}
 
-	return hackResult.Result, nil
+	// The Pentester's narrative is not evidence. Pass Primary a bounded ledger
+	// made only from persisted terminal calls so unsupported claims and Searcher
+	// statements cannot silently become verified findings or reach the Reporter.
+	if subtaskID == nil {
+		return "", fmt.Errorf("cannot verify pentester evidence without a subtask ID")
+	}
+	toolcalls, err := fp.db.GetSubtaskToolcalls(ctx, sql.NullInt64{Int64: *subtaskID, Valid: true})
+	if err != nil {
+		return "", fmt.Errorf("failed to load pentester evidence: %w", err)
+	}
+	return pentesterTerminalEvidence(toolcalls), nil
 }
 
 func (fp *flowProvider) performSearcher(
