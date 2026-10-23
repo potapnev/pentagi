@@ -506,7 +506,7 @@ func (fp *flowProvider) restoreChain(
 
 	chainObs := observation.Chain(
 		langfuse.WithChainName("restore message chain"),
-		langfuse.WithChainInput(rawChain),
+		langfuse.WithChainInput(redactPrivateAssessmentChain(rawChain)),
 		langfuse.WithChainMetadata(metadata),
 	)
 	ctx, observation = chainObs.Observation(ctx)
@@ -609,11 +609,11 @@ func (fp *flowProvider) restoreChain(
 	}
 
 	chainObs.End(
-		langfuse.WithChainOutput(chain),
+		langfuse.WithChainOutput(redactPrivateAssessmentChain(chain)),
 		langfuse.WithChainStatus("success"),
 	)
 
-	chainBlob, err := json.Marshal(chain)
+	chainBlob, err := marshalChainForStorage(chain)
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to marshal msg chain: %w", err)
 	}
@@ -705,7 +705,7 @@ func (fp *flowProvider) processChain(
 		}
 	}
 
-	chainBlob, err := json.Marshal(updatedChain)
+	chainBlob, err := marshalChainForStorage(updatedChain)
 	if err != nil {
 		obs.LogErrorOrCancel(logger, err, "failed to marshal updated chain")
 		return fmt.Errorf("failed to marshal updated chain %d: %w", msgChainID, err)
@@ -780,7 +780,7 @@ func (fp *flowProvider) prepareExecutionContext(ctx context.Context, taskID, sub
 	}
 
 	evaluator.End(
-		langfuse.WithEvaluatorOutput(executionContext),
+		langfuse.WithEvaluatorOutput(tools.RedactCredentialsFromResearchContext(executionContext)),
 		langfuse.WithEvaluatorStatus("success"),
 		langfuse.WithEvaluatorLevel(langfuse.ObservationLevelDebug),
 	)
@@ -789,15 +789,21 @@ func (fp *flowProvider) prepareExecutionContext(ctx context.Context, taskID, sub
 }
 
 func (fp *flowProvider) getExecutionContext(ctx context.Context, taskID, subtaskID *int64) (string, error) {
+	var (
+		context string
+		err     error
+	)
 	if taskID != nil && subtaskID != nil {
-		return fp.getExecutionContextBySubtask(ctx, *taskID, *subtaskID)
+		context, err = fp.getExecutionContextBySubtask(ctx, *taskID, *subtaskID)
+	} else if taskID != nil {
+		context, err = fp.getExecutionContextByTask(ctx, *taskID)
+	} else {
+		context, err = fp.getExecutionContextByFlow(ctx)
 	}
-
-	if taskID != nil {
-		return fp.getExecutionContextByTask(ctx, *taskID)
+	if err != nil {
+		return "", err
 	}
-
-	return fp.getExecutionContextByFlow(ctx)
+	return tools.RedactCredentialsFromResearchContext(context), nil
 }
 
 func (fp *flowProvider) getExecutionContextBySubtask(ctx context.Context, taskID, subtaskID int64) (string, error) {

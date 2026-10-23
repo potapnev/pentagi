@@ -198,7 +198,7 @@ func (ap *assistantProvider) PerformAgentChain(ctx context.Context) error {
 	ctx, observation := obs.Observer.NewObservation(ctx)
 	executorAgent := observation.Agent(
 		langfuse.WithAgentName(fmt.Sprintf("assistant %d for flow %d: %s", ap.id, ap.fp.ID(), ap.fp.Title())),
-		langfuse.WithAgentInput(chain),
+		langfuse.WithAgentInput(redactPrivateAssessmentChain(chain)),
 		langfuse.WithAgentMetadata(langfuse.Metadata{
 			"assistant_id": ap.id,
 			"flow_id":      ap.fp.ID(),

@@ -785,7 +785,7 @@ func (fp *flowProvider) PerformAgentChain(ctx context.Context, taskID, subtaskID
 	ctx, observation := obs.Observer.NewObservation(ctx)
 	executorAgent := observation.Agent(
 		langfuse.WithAgentName(fmt.Sprintf("primary agent for subtask %d: %s", subtaskID, subtask.Title)),
-		langfuse.WithAgentInput(chain),
+		langfuse.WithAgentInput(redactPrivateAssessmentChain(chain)),
 		langfuse.WithAgentMetadata(langfuse.Metadata{
 			"flow_id":      fp.flowID,
 			"task_id":      taskID,

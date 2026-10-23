@@ -56,7 +56,7 @@ func (fp *flowProvider) performTaskResultReporter(
 		return nil, fmt.Errorf("failed to get reporter executor: %w", err)
 	}
 
-	chainBlob, err := json.Marshal(chain)
+	chainBlob, err := marshalChainForStorage(chain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal msg chain: %w", err)
 	}
@@ -139,7 +139,7 @@ func (fp *flowProvider) performSubtasksGenerator(
 		return nil, fmt.Errorf("failed to get generator executor: %w", err)
 	}
 
-	chainBlob, err := json.Marshal(chain)
+	chainBlob, err := marshalChainForStorage(chain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal msg chain: %w", err)
 	}
@@ -319,7 +319,7 @@ func (fp *flowProvider) performSubtasksRefiner(
 		return nil, fmt.Errorf("failed to get refiner executor: %w", err)
 	}
 
-	chainBlob, err := json.Marshal(chain)
+	chainBlob, err := marshalChainForStorage(chain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal msg chain: %w", err)
 	}
@@ -1034,7 +1034,7 @@ func (fp *flowProvider) performSimpleChain(
 	}
 	chain = append(chain, msg)
 
-	chainBlob, err := json.Marshal(chain)
+	chainBlob, err := marshalChainForStorage(chain)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal summarizer msg chain: %w", err)
 	}

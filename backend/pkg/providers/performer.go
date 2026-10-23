@@ -939,7 +939,7 @@ func (fp *flowProvider) updateMsgChain(
 	chain []llms.MessageContent,
 	durationDelta float64,
 ) error {
-	chainBlob, err := json.Marshal(chain)
+	chainBlob, err := marshalChainForStorage(chain)
 	if err != nil {
 		return fmt.Errorf("failed to marshal msg chain: %w", err)
 	}

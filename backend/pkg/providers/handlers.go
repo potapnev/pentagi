@@ -617,6 +617,12 @@ func (fp *flowProvider) GetPentesterHandler(ctx context.Context, taskID, subtask
 	if err != nil {
 		return nil, err
 	}
+	if ptrTask != nil && ptrTask.FlowID != fp.flowID {
+		return nil, fmt.Errorf("task %d does not belong to flow %d", ptrTask.ID, fp.flowID)
+	}
+	if ptrTask != nil && ptrSubtask != nil && ptrSubtask.TaskID != ptrTask.ID {
+		return nil, fmt.Errorf("subtask %d does not belong to task %d", ptrSubtask.ID, ptrTask.ID)
+	}
 
 	executionContext, err := fp.getExecutionContext(ctx, taskID, subtaskID)
 	if err != nil {
@@ -624,10 +630,9 @@ func (fp *flowProvider) GetPentesterHandler(ctx context.Context, taskID, subtask
 	}
 
 	pentesterHandler := func(ctx context.Context, action tools.PentesterAction) (string, error) {
+		userContext := pentesterUserContext(ptrTask, ptrSubtask, action.Question, executionContext)
 		pentesterContext := map[string]map[string]any{
-			"user": {
-				"Question": action.Question,
-			},
+			"user": userContext,
 			"system": {
 				"HackResultToolName":      tools.HackResultToolName,
 				"WebSearchToolName":       tools.WebSearchToolName,
@@ -648,7 +653,7 @@ func (fp *flowProvider) GetPentesterHandler(ctx context.Context, taskID, subtask
 				"DockerImage":             fp.image,
 				"Cwd":                     docker.WorkFolderPathInContainer,
 				"ContainerPorts":          fp.getContainerPortsDescription(),
-				"ExecutionContext":        executionContext,
+				"ExecutionContext":        userContext["ExecutionContext"],
 				"Lang":                    fp.language,
 				"CurrentTime":             getCurrentTime(),
 				"ToolPlaceholder":         ToolPlaceholder,
@@ -657,14 +662,21 @@ func (fp *flowProvider) GetPentesterHandler(ctx context.Context, taskID, subtask
 		}
 
 		pentesterCtx, observation := obs.Observer.NewObservation(ctx)
+		diagnosticContext := map[string]map[string]any{
+			"user": {
+				"Question":                    tools.RedactCredentialsFromResearchContext(userContext["Question"].(string)),
+				"AuthorizedAssessmentContext": "[REDACTED]",
+			},
+			"system": pentesterContext["system"],
+		}
 		pentesterEvaluator := observation.Evaluator(
 			langfuse.WithEvaluatorName("render pentester agent prompts"),
-			langfuse.WithEvaluatorInput(pentesterContext),
+			langfuse.WithEvaluatorInput(diagnosticContext),
 			langfuse.WithEvaluatorMetadata(langfuse.Metadata{
-				"user_context":   pentesterContext["user"],
+				"user_context":   diagnosticContext["user"],
 				"system_context": pentesterContext["system"],
-				"task":           ptrTask,
-				"subtask":        ptrSubtask,
+				"task_id":        taskID,
+				"subtask_id":     subtaskID,
 				"lang":           fp.language,
 			}),
 		)
@@ -681,14 +693,14 @@ func (fp *flowProvider) GetPentesterHandler(ctx context.Context, taskID, subtask
 
 		pentesterEvaluator.End(
 			langfuse.WithEvaluatorOutput(map[string]any{
-				"user_template":   userPentesterTmpl,
+				"user_template":   redactPrivateAssessmentContext(userPentesterTmpl),
 				"system_template": systemPentesterTmpl,
 			}),
 			langfuse.WithEvaluatorStatus("success"),
 			langfuse.WithEvaluatorLevel(langfuse.ObservationLevelDebug),
 		)
 
-		pentesterResult, err := fp.performPentester(ctx, taskID, subtaskID, systemPentesterTmpl, userPentesterTmpl, action.Question)
+		pentesterResult, err := fp.performPentester(ctx, taskID, subtaskID, systemPentesterTmpl, userPentesterTmpl, userContext["Question"].(string))
 		if err != nil {
 			return "", wrapError(ctx, "failed to get pentester result", err)
 		}

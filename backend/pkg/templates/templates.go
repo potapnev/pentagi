@@ -150,6 +150,7 @@ var PromptVariables = map[PromptType][]string{
 	},
 	PromptTypeQuestionPentester: {
 		"Question",
+		"AuthorizedAssessmentContext",
 	},
 	PromptTypeCoder: {
 		"CodeResultToolName",
