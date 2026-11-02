@@ -97,6 +97,7 @@ func CreateDummyTemplateData() map[string]any {
 		// Numeric limits
 		"N": providers.TasksNumberLimit,
 
+		"FlowProgress": map[string]int{"technical_evidence": 0, "administrative_operations": 0, "duplicate_operations_blocked": 0},
 		"UserFiles": "<user_files>\nUser-provided files for this flow. Use them as input data.\n" +
 			"<uploads>\n/work/uploads/test_file_1.txt\n</uploads>\n" +
 			"<resources>\n/work/resources/test_file_2.txt\n</resources>\n" +

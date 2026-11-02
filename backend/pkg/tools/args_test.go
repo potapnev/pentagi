@@ -1344,3 +1344,23 @@ func TestArgs_TaskResult_RequiresAnExplicitSuccessFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestArgs_TaskResult_AcceptsOnlyExplicitTerminalStatesWhenProvided(t *testing.T) {
+	for _, status := range []string{"COMPLETED", "PARTIAL", "BLOCKED", "FAILED"} {
+		var result TaskResult
+		err := json.Unmarshal([]byte(`{"success":false,"status":"`+status+`","result":"r","message":"m"}`), &result)
+		if err != nil {
+			t.Fatalf("decode %s: %v", status, err)
+		}
+		if err := result.Validate(); err != nil {
+			t.Errorf("status %s rejected: %v", status, err)
+		}
+	}
+	var invalid TaskResult
+	if err := json.Unmarshal([]byte(`{"success":false,"status":"SUCCESS","result":"r","message":"m"}`), &invalid); err != nil {
+		t.Fatal(err)
+	}
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("invalid terminal status accepted")
+	}
+}

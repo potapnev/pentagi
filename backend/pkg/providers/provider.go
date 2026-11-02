@@ -14,6 +14,7 @@ import (
 	"pentagi/pkg/csum"
 	"pentagi/pkg/database"
 	"pentagi/pkg/docker"
+	"pentagi/pkg/execution"
 	"pentagi/pkg/flowfiles"
 	"pentagi/pkg/graphiti"
 	obs "pentagi/pkg/observability"
@@ -134,8 +135,10 @@ type subtasksInfo struct {
 }
 
 type flowProvider struct {
-	db database.Querier
-	mx *sync.RWMutex
+	db        database.Querier
+	mx        *sync.RWMutex
+	guardOnce sync.Once
+	workGuard *execution.FlowGuard
 
 	cfg *config.Config
 
@@ -475,6 +478,7 @@ func (fp *flowProvider) RefineSubtasks(ctx context.Context, taskID int64) ([]too
 			"N":                       max(TasksNumberLimit-len(subtasksInfo.Completed), 0),
 			"ToolPlaceholder":         ToolPlaceholder,
 			"UserFiles":               fp.userFilesListing(),
+			"FlowProgress":            fp.executionWorkGuard(ctx).Stats(),
 		},
 	}
 

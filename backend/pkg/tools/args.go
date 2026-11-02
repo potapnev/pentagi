@@ -95,6 +95,7 @@ type SubtaskPatch struct {
 }
 
 type TaskResult struct {
+	Status string `json:"status,omitempty" jsonschema:"type=string,enum=COMPLETED,enum=PARTIAL,enum=BLOCKED,enum=FAILED" jsonschema_description:"Evidence-backed terminal assessment state: COMPLETED only when all primary objectives were tested; PARTIAL when coverage is incomplete; BLOCKED when scope or safety prerequisites prevent testing; FAILED when execution failed."`
 	// Success is a pointer so an omitted field is distinguishable from false.
 	// It decides whether the task is recorded as finished or failed, and a model
 	// that leaves it out must be asked again rather than have a failure assumed.
@@ -398,6 +399,13 @@ type PatchFlowSubtasksAction struct {
 func (tr TaskResult) Validate() error {
 	if tr.Success == nil {
 		return fmt.Errorf("success is required: state explicitly whether the objective was reached")
+	}
+	if tr.Status != "" {
+		switch tr.Status {
+		case "COMPLETED", "PARTIAL", "BLOCKED", "FAILED":
+		default:
+			return fmt.Errorf("status must be COMPLETED, PARTIAL, BLOCKED, or FAILED")
+		}
 	}
 
 	return nil

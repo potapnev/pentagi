@@ -1,0 +1,15 @@
+{
+  "source_flow": "completed-flow-81",
+  "source_status": "finished",
+  "source_tasks": 21,
+  "source_toolcalls": 35238,
+  "file_read_calls": 44,
+  "distinct_file_read_signatures": 19,
+  "excess_exact_repeats": 25,
+  "maximum_same_signature_calls": 15,
+  "signature": {
+    "tool": "file",
+    "action": "read_file",
+    "path": "/work/<redacted-evidence-file>"
+  }
+}

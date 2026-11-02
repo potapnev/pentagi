@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"pentagi/pkg/database"
+	"pentagi/pkg/execution"
 	"pentagi/pkg/providers"
 	"pentagi/pkg/tools"
 
@@ -128,6 +129,20 @@ func (stc *subtaskController) RefineSubtasks(ctx context.Context) error {
 
 	if len(plan) == 0 {
 		return nil // no subtasks refined
+	}
+	if execution.HasCompletedAdministrativeMatch(plan, subtasks) {
+		calls, callsErr := readFlowToolcalls(ctx, stc.taskCtx.DB, stc.taskCtx.FlowID)
+		if callsErr != nil {
+			logrus.WithContext(ctx).WithError(callsErr).WithField("task_id", stc.taskCtx.TaskID).
+				Warn("could not verify new evidence before re-adding administrative work; suppressing duplicates")
+		}
+		filtered := execution.FilterRepeatedAdministrativeWork(plan, subtasks, calls)
+		if len(filtered) != len(plan) {
+			logrus.WithContext(ctx).WithFields(logrus.Fields{
+				"task_id": stc.taskCtx.TaskID, "suppressed": len(plan) - len(filtered),
+			}).Info("suppressed completed administrative subtasks without newer technical evidence")
+		}
+		plan = filtered
 	}
 
 	subtaskIDs := make([]int64, 0, len(subtasks))

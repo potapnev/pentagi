@@ -16,6 +16,7 @@ import (
 	"pentagi/pkg/config"
 	"pentagi/pkg/database"
 	"pentagi/pkg/docker"
+	"pentagi/pkg/execution"
 	"pentagi/pkg/flowfiles"
 	"pentagi/pkg/graph/model"
 	"pentagi/pkg/graph/subscriptions"
@@ -846,15 +847,27 @@ func (fw *flowWorker) Finish(ctx context.Context) error {
 		return err
 	}
 
+	flowStatus := database.FlowStatusFinished
 	for _, task := range fw.tc.ListTasks(ctx) {
 		if !task.IsCompleted() {
 			if err := task.Finish(ctx); err != nil {
 				return fmt.Errorf("failed to finish task %d: %w", task.GetTaskID(), err)
 			}
 		}
+		taskStatus, err := task.GetStatus(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to verify task %d completion: %w", task.GetTaskID(), err)
+		}
+		taskResult, err := task.GetResult(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to verify task %d result: %w", task.GetTaskID(), err)
+		}
+		if taskStatus != database.TaskStatusFinished || execution.ParseTerminalStatus(taskResult) != execution.OutcomeCompleted {
+			flowStatus = database.FlowStatusFailed
+		}
 	}
 
-	if err := fw.SetStatus(ctx, database.FlowStatusFinished); err != nil {
+	if err := fw.SetStatus(ctx, flowStatus); err != nil {
 		return fmt.Errorf("failed to set flow %d status: %w", fw.flowCtx.FlowID, err)
 	}
 

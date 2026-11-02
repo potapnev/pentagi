@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"pentagi/pkg/database"
+	"pentagi/pkg/execution"
 	obs "pentagi/pkg/observability"
 	"pentagi/pkg/providers"
 	"pentagi/pkg/tools"
@@ -386,11 +387,37 @@ func (tw *taskWorker) writeResult(ctx context.Context) error {
 		return fmt.Errorf("failed to get task %d result: %w", tw.taskCtx.TaskID, err)
 	}
 
-	var taskStatus database.TaskStatus
-	if jobResult.Success.Bool() {
-		taskStatus = database.TaskStatusFinished
+	proposed := execution.AssessmentStatus(jobResult.Status)
+	if proposed == "" {
+		if jobResult.Success.Bool() {
+			proposed = execution.OutcomeCompleted
+		} else {
+			proposed = execution.OutcomeFailed
+		}
+	}
+	if !jobResult.Success.Bool() && proposed == execution.OutcomeCompleted {
+		proposed = execution.OutcomeFailed
+	}
+	subtasks, subtasksErr := tw.taskCtx.DB.GetTaskSubtasks(ctx, tw.taskCtx.TaskID)
+	calls, callsErr := readFlowToolcalls(ctx, tw.taskCtx.DB, tw.taskCtx.FlowID)
+	assessment := execution.Coverage{Status: execution.OutcomePartial}
+	if subtasksErr == nil && callsErr == nil {
+		assessment = execution.AssessOutcome(database.Task{Input: tw.taskCtx.TaskTitle + " " + tw.taskCtx.TaskInput}, subtasks, calls, proposed, jobResult.Result)
 	} else {
-		taskStatus = database.TaskStatusFailed
+		jobResult.Result += "\n\nTechnical coverage could not be verified from stored execution evidence; this result cannot be marked COMPLETED."
+	}
+	for _, subtask := range subtasks {
+		switch subtask.Status {
+		case database.SubtaskStatusCreated, database.SubtaskStatusRunning, database.SubtaskStatusWaiting:
+			if assessment.Status == execution.OutcomeCompleted {
+				assessment.Status = execution.OutcomePartial
+			}
+		}
+	}
+	jobResult.Result = execution.FormatTerminalResult(assessment.Status, jobResult.Result)
+	taskStatus := database.TaskStatusFailed
+	if assessment.Status == execution.OutcomeCompleted {
+		taskStatus = database.TaskStatusFinished
 	}
 
 	if err := tw.SetResult(ctx, jobResult.Result); err != nil {
@@ -466,10 +493,17 @@ func (tw *taskWorker) Report(ctx context.Context) error {
 		return err
 	}
 
-	// A task closed by a report has the same leftovers an ordinary finish
-	// closes: writeResult marks the task done without touching subtasks that
-	// never ran, and they would sit under a finished task forever.
-	return tw.finishOutstandingSubtasks(ctx)
+	// Only a verified completed assessment may close untouched plan rows as
+	// finished. Partial, blocked, or failed reports retain failed/unfinished
+	// coverage rather than converting it into apparent success.
+	result, err := tw.GetResult(ctx)
+	if err != nil {
+		return err
+	}
+	if execution.ParseTerminalStatus(result) == execution.OutcomeCompleted {
+		return tw.finishOutstandingSubtasks(ctx)
+	}
+	return nil
 }
 
 // finishOutstandingSubtasks closes any subtask the task did not reach. Shared
@@ -516,13 +550,16 @@ func (tw *taskWorker) Finish(ctx context.Context) error {
 
 	for _, st := range tw.stc.ListSubtasks(ctx) {
 		if !st.IsCompleted() {
-			if err := st.Finish(ctx); err != nil {
+			if err := st.SetStatus(ctx, database.SubtaskStatusFailed); err != nil {
 				return err
 			}
 		}
 	}
-
-	if err := tw.SetStatus(ctx, database.TaskStatusFinished); err != nil {
+	if err := tw.SetResult(ctx, execution.FormatTerminalResult(execution.OutcomePartial,
+		"Task was stopped before evidence-backed objective completion.")); err != nil {
+		return err
+	}
+	if err := tw.SetStatus(ctx, database.TaskStatusFailed); err != nil {
 		return err
 	}
 

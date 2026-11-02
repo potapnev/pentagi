@@ -205,9 +205,9 @@ func TestFlow_Finish_LeavesTheFlowRecordedFinished(t *testing.T) {
 			wantStatuses: []database.FlowStatus{database.FlowStatusFinished},
 		},
 		{
-			name:         "a last task that reports the flow waiting",
+			name:         "an unverified open task leaves the flow failed",
 			openTask:     true,
-			wantStatuses: []database.FlowStatus{database.FlowStatusWaiting, database.FlowStatusFinished},
+			wantStatuses: []database.FlowStatus{database.FlowStatusWaiting, database.FlowStatusFailed},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

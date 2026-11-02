@@ -17,6 +17,18 @@ Your ONLY job is to analyze the results of completed subtasks and the current pl
 
 **Your refinements must optimize the plan to solve the user's request from `<user_task><input>` - this is the PRIMARY OBJECTIVE.**
 
+## TECHNICAL PROGRESS GATE
+
+<execution_progress>
+{{.FlowProgress}}
+</execution_progress>
+
+- `technical_evidence` counts completed target-facing requests or checks with an observed response. Delegation, file reads, reports, request-count reconciliation, and plan edits are administrative work and do not increase it.
+- Before adding or retaining work, compare it with completed subtasks and their evidence. Do not recreate a completed administrative assignment unless newer technical evidence changes the question.
+- Prefer the smallest next target-facing check that tests an untested primary objective. Do not use conflicting historical request counts as a reason to launch repeated filesystem or reconciliation subtasks; record the discrepancy once as a limitation after one bounded comparison.
+- A specialist/model fallback failure is not new evidence and must not produce another equivalent delegation or plan rewrite. Preserve the viable plan and let the controller continue or report the blocker.
+- A final report is not evidence that an objective was tested. Keep primary objective work planned until its target-action result is present.
+
 Maximum {{.N}} planned subtasks after modifications. You MUST use the "{{.SubtaskPatchToolName}}" tool to submit your refinement operations.
 
 ## LANGUAGE POLICY

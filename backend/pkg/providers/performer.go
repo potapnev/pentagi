@@ -320,6 +320,17 @@ func (fp *flowProvider) execToolCall(
 		"msg_chain_id": chainID,
 	}))
 
+	guardTaskID := int64(0)
+	if taskID != nil {
+		guardTaskID = *taskID
+	}
+	workGuard := fp.executionWorkGuard(ctx)
+	if workGuard.Blocked(funcName, funcArgs, guardTaskID) {
+		previous := cutString(workGuard.PreviousResult(funcName, funcArgs, guardTaskID), repeatEchoLimit)
+		logger.Warn("repeated administrative or delegated work blocked across the Flow")
+		return fmt.Sprintf("Repeated work blocked: reuse the prior result below. Repeat only after new target evidence changes the question.\n\n%s", previous), nil
+	}
+
 	if detector.detect(toolCall) {
 		if len(detector.funcCalls) >= RepeatingToolCallThreshold+maxSoftDetectionsBeforeAbort {
 			errMsg := fmt.Sprintf("tool '%s' repeated %d times consecutively, aborting chain", funcName, len(detector.funcCalls))
@@ -361,6 +372,12 @@ func (fp *flowProvider) execToolCall(
 
 		response, err = executor.Execute(ctx, streamID, toolCall.ID, funcName, funcName, thinking, funcArgs)
 		if err != nil {
+			if errors.Is(err, ErrAgentModelCall) {
+				// A delegated agent's provider/fallback failure is not malformed
+				// tool input. Retrying through the argument fixer replans the same
+				// delegation without new evidence.
+				return "", err
+			}
 			if errors.Is(err, context.Canceled) {
 				return "", err
 			}
@@ -390,6 +407,7 @@ func (fp *flowProvider) execToolCall(
 			}
 		} else {
 			detector.lastResponse = response
+			workGuard.Record(funcName, funcArgs, response, true, guardTaskID)
 			break
 		}
 	}

@@ -108,8 +108,11 @@ Your final report MUST:
 
 You MUST complete your evaluation by using the `{{.ReportResultToolName}}` tool with:
 - The "success" field — boolean true/false reflecting your independent judgment of overall task outcome
+- The "status" field — exactly one of `COMPLETED`, `PARTIAL`, `BLOCKED`, or `FAILED`; use `COMPLETED` only when every primary technical objective has a corresponding successful target-action response in the execution evidence. Reports, delegation, filesystem inspection, and reconciliation are not target-action evidence.
 - The "result" field — detailed assessment grounded in concrete evidence from execution logs; engagement-log closing entry written in the engagement language (`{{.Lang}}`), translated from English source material while preserving technical identifiers verbatim
 - The "message" field — concise recap of the key outcome; engagement-log closing summary written in the engagement language (`{{.Lang}}`)
+
+When no target test could safely begin because required scope or safety prerequisites were missing, use `BLOCKED` and name the missing prerequisite. Use `PARTIAL` when some target evidence exists but an objective remains untested. Use `FAILED` for execution failure. Do not report conflicting historical request totals as new technical progress; after one bounded comparison, record an unresolved discrepancy as a limitation.
 {{if .UserFiles}}
 
 ## TASK MATERIALS

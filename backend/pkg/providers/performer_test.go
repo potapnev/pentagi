@@ -640,14 +640,16 @@ func TestPerformer_CallWithRetries_StopsAskingWhenRetryingCannotHelp(t *testing.
 type performerExecutor struct {
 	tools.ContextToolsExecutor
 
-	err   error
-	calls int
+	err         error
+	calls       int
+	schemaCalls int
 }
 
 // errPerformerNoSchema makes a call that reaches argument correction fail on its own error instead of a nil dereference.
 var errPerformerNoSchema = errors.New("performerExecutor has no tool schemas")
 
 func (e *performerExecutor) GetToolSchema(string) (*schema.Schema, error) {
+	e.schemaCalls++
 	return nil, errPerformerNoSchema
 }
 
@@ -709,6 +711,7 @@ func TestPerformer_ExecToolCall_ReturnsAnErrorNoCorrectionCanFixAtOnce(t *testin
 	}{
 		{name: "a call cancelled with the flow", err: fmt.Errorf("terminal: %w", context.Canceled)},
 		{name: "a call the flow state forbids", err: fmt.Errorf("no plan yet: %w", tools.ErrFlowStateGuard)},
+		{name: "a delegated agent model fallback failed", err: fmt.Errorf("pentester: %w", ErrAgentModelCall)},
 	}
 
 	for _, tt := range tests {
@@ -724,6 +727,9 @@ func TestPerformer_ExecToolCall_ReturnsAnErrorNoCorrectionCanFixAtOnce(t *testin
 
 			assert.ErrorIs(t, err, tt.err)
 			assert.Equal(t, 1, executor.calls, "the call must not be tried again")
+			if errors.Is(tt.err, ErrAgentModelCall) {
+				assert.Zero(t, executor.schemaCalls, "a model fallback failure is not a tool-argument error")
+			}
 		})
 	}
 }
