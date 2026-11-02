@@ -48,7 +48,7 @@ func TestFlowFinish_FinishUnloadedFlow_ClosesTheFlowAndWhatItLeftOpen(t *testing
 
 		return pub, dkr, fc.FinishFlow(context.Background(), flowID)
 	}
-	finished := []database.UpdateFlowStatusParams{{Status: database.FlowStatusFinished, ID: flowID}}
+	failed := []database.UpdateFlowStatusParams{{Status: database.FlowStatusFailed, ID: flowID}}
 
 	t.Run("a running flow is closed with every task, subtask and assistant it left open", func(t *testing.T) {
 		t.Parallel()
@@ -57,25 +57,24 @@ func TestFlowFinish_FinishUnloadedFlow_ClosesTheFlowAndWhatItLeftOpen(t *testing
 		pub, dkr, err := finish(q, nil)
 
 		require.NoError(t, err, "a flow whose provider stopped resolving is still closable")
-		assert.Equal(t, finished, q.flowStatus)
-		assert.Equal(t, []database.UpdateTaskStatusParams{{Status: database.TaskStatusFinished, ID: 11}}, q.taskStatus,
-			"a closed task is not rewritten")
+		assert.Equal(t, failed, q.flowStatus, "an unloaded flow cannot infer objective completion")
+		assert.Equal(t, []database.UpdateTaskFailedResultParams{{Result: "ASSESSMENT_STATUS: PARTIAL\n\nFlow worker was unavailable before evidence-backed completion.", ID: 11}}, q.taskFailedResults)
 		assert.Equal(t, []database.UpdateSubtaskStatusParams{
-			{Status: database.SubtaskStatusFinished, ID: 21},
-			{Status: database.SubtaskStatusFinished, ID: 23},
+			{Status: database.SubtaskStatusFailed, ID: 21},
+			{Status: database.SubtaskStatusFailed, ID: 23},
 		}, q.subtaskStatus)
 		require.Equal(t, []database.Task{
-			{ID: 11, Status: database.TaskStatusFinished},
+			{ID: 11, Status: database.TaskStatusFailed, Result: "ASSESSMENT_STATUS: PARTIAL\n\nFlow worker was unavailable before evidence-backed completion."},
 			{ID: 13, Status: database.TaskStatusFinished},
 		}, pub.taskUpdated, "an open tab keeps a subtask running until it hears about it; a task with nothing closed is not republished")
-		assert.Equal(t, []database.Subtask{{ID: 23, Status: database.SubtaskStatusFinished}}, pub.taskSubtasks[1])
+		assert.Equal(t, []database.Subtask{{ID: 23, Status: database.SubtaskStatusFailed}}, pub.taskSubtasks[1])
 		assert.Equal(t, []database.UpdateAssistantStatusParams{{Status: database.AssistantStatusFinished, ID: 31}},
 			q.assistantStatus, "only the unfinished assistant is closed")
 		require.Len(t, pub.assistantUpdated, 1)
 		assert.Equal(t, int64(31), pub.assistantUpdated[0].ID)
 		assert.Equal(t, []string{"cid-41"}, dkr.removed, "an already deleted container is not purged again")
 		require.Len(t, pub.flowUpdated, 1, "the client learns the flow is finished")
-		assert.Equal(t, database.FlowStatusFinished, pub.flowUpdated[0].Status)
+		assert.Equal(t, database.FlowStatusFailed, pub.flowUpdated[0].Status)
 	})
 
 	t.Run("a container query that fails once is read again for the event", func(t *testing.T) {
@@ -88,7 +87,7 @@ func TestFlowFinish_FinishUnloadedFlow_ClosesTheFlowAndWhatItLeftOpen(t *testing
 
 		require.NoError(t, err)
 		require.Len(t, pub.flowUpdated, 1, "the subscriber learns the flow is finished")
-		assert.Equal(t, database.FlowStatusFinished, pub.flowUpdated[0].Status)
+		assert.Equal(t, database.FlowStatusFailed, pub.flowUpdated[0].Status)
 		assert.Len(t, pub.flowTerms[0], 2, "the event carries the terminals the flow still has")
 		assert.Empty(t, dkr.removed, "the failed read left nothing to release")
 	})
@@ -101,7 +100,7 @@ func TestFlowFinish_FinishUnloadedFlow_ClosesTheFlowAndWhatItLeftOpen(t *testing
 		pub, _, err := finish(q, nil)
 
 		require.NoError(t, err)
-		assert.Equal(t, finished, q.flowStatus, "the row is still closed")
+		assert.Equal(t, failed, q.flowStatus, "the row is still closed")
 		assert.Empty(t, pub.flowUpdated, "an event with no terminals would wipe the terminals an open tab shows")
 	})
 
@@ -113,7 +112,7 @@ func TestFlowFinish_FinishUnloadedFlow_ClosesTheFlowAndWhatItLeftOpen(t *testing
 		pub, _, err := finish(q, nil)
 
 		require.NoError(t, err)
-		assert.Equal(t, finished, q.flowStatus)
+		assert.Equal(t, failed, q.flowStatus)
 		assert.Len(t, pub.flowUpdated, 1)
 		assert.Empty(t, pub.assistantUpdated)
 	})
@@ -125,7 +124,7 @@ func TestFlowFinish_FinishUnloadedFlow_ClosesTheFlowAndWhatItLeftOpen(t *testing
 		pub, _, err := finish(q, errors.New("docker is down"))
 
 		require.NoError(t, err)
-		assert.Equal(t, finished, q.flowStatus)
+		assert.Equal(t, failed, q.flowStatus)
 		assert.Len(t, pub.flowUpdated, 1)
 	})
 
@@ -151,8 +150,8 @@ func TestFlowFinish_FinishUnloadedFlow_ClosesTheFlowAndWhatItLeftOpen(t *testing
 		require.NoError(t, err)
 		assert.Empty(t, q.flowStatus)
 		assert.Empty(t, pub.flowUpdated)
-		assert.Equal(t, []database.UpdateTaskStatusParams{{Status: database.TaskStatusFinished, ID: 11}}, q.taskStatus,
-			"a repeat is the only thing left that can close the task")
+		assert.Equal(t, []database.UpdateTaskFailedResultParams{{Result: "ASSESSMENT_STATUS: PARTIAL\n\nFlow worker was unavailable before evidence-backed completion.", ID: 11}}, q.taskFailedResults,
+			"a repeat closes the leftover task as incomplete")
 		assert.Equal(t, []database.UpdateAssistantStatusParams{{Status: database.AssistantStatusFinished, ID: 31}},
 			q.assistantStatus, "and the assistant")
 		assert.Equal(t, []string{"cid-41"}, dkr.removed, "and release the sandbox")
@@ -240,6 +239,26 @@ func TestFlowFinish_MissingFlowError_AnswersNotFoundOnlyForAFlowTheDatabaseLacks
 	}
 }
 
+func TestFlowCompletionStatusRequiresExplicitCompletedTaskResults(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		tasks []database.Task
+		want  database.FlowStatus
+	}{
+		{name: "verified completion", tasks: []database.Task{{ID: 1, Status: database.TaskStatusFinished, Result: "ASSESSMENT_STATUS: COMPLETED\n"}}, want: database.FlowStatusFinished},
+		{name: "partial result", tasks: []database.Task{{ID: 1, Status: database.TaskStatusFailed, Result: "ASSESSMENT_STATUS: PARTIAL\n"}}, want: database.FlowStatusFailed},
+		{name: "missing result marker", tasks: []database.Task{{ID: 1, Status: database.TaskStatusFinished, Result: "report written"}}, want: database.FlowStatusFailed},
+		{name: "empty flow", want: database.FlowStatusFinished},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fc, _, _ := newFinishController(&finishFakeQuerier{flow: database.Flow{ID: 7}, tasks: tc.tasks})
+			got, err := fc.flowCompletionStatus(t.Context(), 7)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestFlowFinish_FinishFlowLeftovers_ClosesWhatTheWorkerDidNotHold(t *testing.T) {
 	t.Parallel()
 
@@ -278,8 +297,9 @@ func TestFlowFinish_FinishFlowLeftovers_ClosesWhatTheWorkerDidNotHold(t *testing
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, []database.UpdateTaskStatusParams{{Status: database.TaskStatusFinished, ID: 59}}, tc.q.taskStatus,
-				"a task the worker never restored is closed too")
+			assert.Equal(t, []database.UpdateTaskFailedResultParams{{
+				Result: "ASSESSMENT_STATUS: PARTIAL\n\nFlow worker was unavailable before evidence-backed completion.", ID: 59,
+			}}, tc.q.taskFailedResults, "a task the worker never restored is closed as incomplete")
 			assert.Len(t, pub.taskUpdated, 1, "the client learns the task is closed")
 			assert.Equal(t, []database.UpdateAssistantStatusParams{{Status: database.AssistantStatusFinished, ID: 31}},
 				tc.q.assistantStatus, "an assistant whose provider stopped resolving never reaches the worker")

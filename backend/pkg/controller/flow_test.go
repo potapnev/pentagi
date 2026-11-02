@@ -60,6 +60,42 @@ type scriptedTask struct {
 	err        error
 }
 
+type terminalResultTask struct {
+	TaskWorker
+	status database.TaskStatus
+	result string
+}
+
+func (t *terminalResultTask) GetTaskID() int64  { return 11 }
+func (t *terminalResultTask) GetTitle() string  { return "security assessment" }
+func (t *terminalResultTask) IsCompleted() bool { return true }
+func (t *terminalResultTask) GetStatus(context.Context) (database.TaskStatus, error) {
+	return t.status, nil
+}
+func (t *terminalResultTask) GetResult(context.Context) (string, error) { return t.result, nil }
+
+func TestFlow_FinishRequiresEvidenceBackedCompletedTaskResult(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		status     database.TaskStatus
+		result     string
+		flowStatus database.FlowStatus
+	}{
+		{name: "completed", status: database.TaskStatusFinished, result: "ASSESSMENT_STATUS: COMPLETED\n", flowStatus: database.FlowStatusFinished},
+		{name: "partial", status: database.TaskStatusFailed, result: "ASSESSMENT_STATUS: PARTIAL\n", flowStatus: database.FlowStatusFailed},
+		{name: "missing terminal evidence", status: database.TaskStatusFinished, result: "report says success", flowStatus: database.FlowStatusFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := &finishFakeQuerier{flow: database.Flow{ID: 42, Status: database.FlowStatusRunning}}
+			fw := newFinishableWorker(q, &callerFakeExecutor{})
+			fw.tc = &scriptedTasks{tasks: []TaskWorker{&terminalResultTask{status: tc.status, result: tc.result}}}
+			require.NoError(t, fw.Finish(t.Context()))
+			require.NotEmpty(t, q.flowStatus)
+			assert.Equal(t, tc.flowStatus, q.flowStatus[len(q.flowStatus)-1].Status)
+		})
+	}
+}
+
 func (t *scriptedTask) GetTaskID() int64                          { return 11 }
 func (t *scriptedTask) GetTitle() string                          { return "scan the host" }
 func (t *scriptedTask) IsCompleted() bool                         { return false }

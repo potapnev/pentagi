@@ -1175,7 +1175,7 @@ func TestFlows_FinishFlow_OutlivesTheRequestThatAskedForIt(t *testing.T) {
 				return
 			}
 			require.Len(t, q.flowStatus, 1)
-			assert.Equal(t, database.FlowStatusFinished, q.flowStatus[0].Status)
+			assert.Equal(t, database.FlowStatusFinished, q.flowStatus[0].Status, "an empty non-assessment flow keeps its close semantics")
 		})
 	}
 }
@@ -1229,8 +1229,8 @@ func TestFlows_FinishFlow_ClosesTheLeftoversOfAWorkerThatDidNotFinish(t *testing
 			require.ErrorIs(t, fc.finishFlowWithin(context.Background(), flowID, tc.budget), tc.wantErr,
 				"the caller still learns the sandbox was left behind")
 
-			require.Len(t, q.taskStatus, 1, "a task only the database knows about is closed by nobody else")
-			assert.Equal(t, int64(11), q.taskStatus[0].ID)
+			require.Len(t, q.taskFailedResults, 1, "a task only the database knows about is closed as incomplete")
+			assert.Equal(t, int64(11), q.taskFailedResults[0].ID)
 			require.Len(t, q.subtaskStatus, 1)
 			assert.Equal(t, int64(21), q.subtaskStatus[0].ID)
 		})
@@ -1259,7 +1259,7 @@ func TestFlows_FinishFlow_StartsItsBudgetOnceItsTurnComes(t *testing.T) {
 	controllerReceive(t, released, "the other lifecycle call to end")
 
 	require.Len(t, q.flowStatus, 1)
-	assert.Equal(t, database.FlowStatusFinished, q.flowStatus[0].Status)
+	assert.Equal(t, database.FlowStatusFinished, q.flowStatus[0].Status, "an empty non-assessment flow keeps its close semantics")
 }
 
 func TestFlows_FinishFlow_LeavesNoSlotSoARetryClosesWhatItLeftOpen(t *testing.T) {
@@ -1276,7 +1276,7 @@ func TestFlows_FinishFlow_LeavesNoSlotSoARetryClosesWhatItLeftOpen(t *testing.T)
 		{name: "a loaded flow whose worker finished the row", loaded: true},
 		{
 			name:           "an unloaded flow",
-			wantFlowStatus: []database.UpdateFlowStatusParams{{Status: database.FlowStatusFinished, ID: flowID}},
+			wantFlowStatus: []database.UpdateFlowStatusParams{{Status: database.FlowStatusFailed, ID: flowID}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1304,7 +1304,7 @@ func TestFlows_FinishFlow_LeavesNoSlotSoARetryClosesWhatItLeftOpen(t *testing.T)
 			}
 
 			require.NoError(t, fc.FinishFlow(context.Background(), flowID))
-			require.Len(t, q.taskStatus, 1, "the retry closes the task the first attempt left open")
+			require.Len(t, q.taskFailedResults, 1, "the retry closes the task as incomplete")
 			require.Len(t, q.subtaskStatus, 1)
 			assert.Len(t, pub.taskUpdated, 1)
 			assert.Equal(t, tc.wantFlowStatus, q.flowStatus)

@@ -179,6 +179,7 @@ type finishFakeQuerier struct {
 
 	flowStatus         []database.UpdateFlowStatusParams
 	taskStatus         []database.UpdateTaskStatusParams
+	taskFailedResults  []database.UpdateTaskFailedResultParams
 	subtaskStatus      []database.UpdateSubtaskStatusParams
 	assistantStatus    []database.UpdateAssistantStatusParams
 	assistantStatusErr error
@@ -236,6 +237,22 @@ func (f *finishFakeQuerier) UpdateTaskStatus(
 	f.taskStatus = append(f.taskStatus, arg)
 
 	return database.Task{ID: arg.ID, Status: arg.Status}, nil
+}
+
+func (f *finishFakeQuerier) UpdateTaskFailedResult(
+	ctx context.Context, arg database.UpdateTaskFailedResultParams,
+) (database.Task, error) {
+	if err := ctx.Err(); err != nil {
+		return database.Task{}, err
+	}
+	f.taskFailedResults = append(f.taskFailedResults, arg)
+	for i := range f.tasks {
+		if f.tasks[i].ID == arg.ID {
+			f.tasks[i].Status = database.TaskStatusFailed
+			f.tasks[i].Result = arg.Result
+		}
+	}
+	return database.Task{ID: arg.ID, Status: database.TaskStatusFailed, Result: arg.Result}, nil
 }
 
 func (f *finishFakeQuerier) UpdateSubtaskStatus(

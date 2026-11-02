@@ -325,13 +325,22 @@ func (fp *flowProvider) execToolCall(
 		guardTaskID = *taskID
 	}
 	workGuard := fp.executionWorkGuard(ctx)
-	if workGuard.Blocked(funcName, funcArgs, guardTaskID) {
-		previous := cutString(workGuard.PreviousResult(funcName, funcArgs, guardTaskID), repeatEchoLimit)
+	if taskID != nil {
+		fp.loadTaskScope(ctx, workGuard, *taskID)
+	}
+	permit, previous, allowed, permitErr := workGuard.Acquire(ctx, funcName, funcArgs, guardTaskID)
+	if permitErr != nil {
+		return "", permitErr
+	}
+	if !allowed {
 		logger.Warn("repeated administrative or delegated work blocked across the Flow")
 		return fmt.Sprintf("Repeated work blocked: reuse the prior result below. Repeat only after new target evidence changes the question.\n\n%s", previous), nil
 	}
 
 	if detector.detect(toolCall) {
+		if permit != nil {
+			permit.Complete("", false)
+		}
 		if len(detector.funcCalls) >= RepeatingToolCallThreshold+maxSoftDetectionsBeforeAbort {
 			errMsg := fmt.Sprintf("tool '%s' repeated %d times consecutively, aborting chain", funcName, len(detector.funcCalls))
 			logger.WithField("repeat_count", len(detector.funcCalls)).Error(errMsg)
@@ -365,6 +374,9 @@ func (fp *flowProvider) execToolCall(
 
 	for idx := 0; idx <= maxRetriesToCallFunction; idx++ {
 		if idx == maxRetriesToCallFunction {
+			if permit != nil {
+				permit.Complete("", false)
+			}
 			err = fmt.Errorf("reached max retries to call function: %w", err)
 			obs.LogErrorOrCancel(logger, err, "failed to exec function")
 			return "", fmt.Errorf("failed to exec function '%s': %w", funcName, err)
@@ -376,9 +388,15 @@ func (fp *flowProvider) execToolCall(
 				// A delegated agent's provider/fallback failure is not malformed
 				// tool input. Retrying through the argument fixer replans the same
 				// delegation without new evidence.
+				if permit != nil {
+					permit.Complete("", false)
+				}
 				return "", err
 			}
 			if errors.Is(err, context.Canceled) {
+				if permit != nil {
+					permit.Complete("", false)
+				}
 				return "", err
 			}
 
@@ -388,6 +406,9 @@ func (fp *flowProvider) execToolCall(
 				// yet, stale subtask, ...). Retrying fixToolCallArgs can't change
 				// that, so surface it to the agent immediately instead of burning
 				// retries on "corrected" arguments that won't help.
+				if permit != nil {
+					permit.Complete("", false)
+				}
 				return "", err
 			}
 
@@ -396,18 +417,26 @@ func (fp *flowProvider) execToolCall(
 			funcExecErr := err
 			funcSchema, err := executor.GetToolSchema(funcName)
 			if err != nil {
+				if permit != nil {
+					permit.Complete("", false)
+				}
 				logger.WithError(err).Error("failed to get tool schema")
 				return "", fmt.Errorf("failed to get tool schema: %w", err)
 			}
 
 			funcArgs, err = fp.fixToolCallArgs(ctx, funcName, funcArgs, funcSchema, funcExecErr)
 			if err != nil {
+				if permit != nil {
+					permit.Complete("", false)
+				}
 				obs.LogErrorOrCancel(logger, err, "failed to fix tool call args")
 				return "", correctorFailure(ctx, err, funcName, funcExecErr)
 			}
 		} else {
 			detector.lastResponse = response
-			workGuard.Record(funcName, funcArgs, response, true, guardTaskID)
+			if permit != nil {
+				permit.Complete(response, true)
+			}
 			break
 		}
 	}

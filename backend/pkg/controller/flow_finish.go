@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"pentagi/pkg/database"
+	"pentagi/pkg/execution"
 	"pentagi/pkg/graph/subscriptions"
 
 	"github.com/sirupsen/logrus"
@@ -48,8 +49,12 @@ func (fc *flowController) finishUnloadedFlow(ctx context.Context, flowID int64) 
 
 	var finished database.Flow
 	if !closed {
+		flowStatus, err := fc.flowCompletionStatus(ctx, flowID)
+		if err != nil {
+			return err
+		}
 		finished, err = fc.db.UpdateFlowStatus(ctx, database.UpdateFlowStatusParams{
-			Status: database.FlowStatusFinished,
+			Status: flowStatus,
 			ID:     flowID,
 		})
 		if err != nil {
@@ -59,7 +64,7 @@ func (fc *flowController) finishUnloadedFlow(ctx context.Context, flowID int64) 
 		logrus.WithContext(ctx).WithFields(logrus.Fields{
 			"flow":     flowID,
 			"provider": flow.ModelProviderName,
-		}).Warn("finished a flow whose worker was never loaded")
+		}).WithField("status", flowStatus).Warn("closed a flow whose worker was never loaded")
 	}
 
 	containers, containersErr := fc.releaseFlowContainers(ctx, flowID)
@@ -80,6 +85,22 @@ func (fc *flowController) finishUnloadedFlow(ctx context.Context, flowID int64) 
 	publisher.FlowUpdated(ctx, finished, containers)
 
 	return nil
+}
+
+func (fc *flowController) flowCompletionStatus(ctx context.Context, flowID int64) (database.FlowStatus, error) {
+	tasks, err := fc.db.GetFlowTasks(ctx, flowID)
+	if err != nil {
+		return database.FlowStatusFailed, fmt.Errorf("failed to verify tasks of flow %d: %w", flowID, err)
+	}
+	if len(tasks) == 0 {
+		return database.FlowStatusFinished, nil
+	}
+	for _, task := range tasks {
+		if task.Status != database.TaskStatusFinished || execution.ParseTerminalStatus(task.Result) != execution.OutcomeCompleted {
+			return database.FlowStatusFailed, nil
+		}
+	}
+	return database.FlowStatusFinished, nil
 }
 
 func (fc *flowController) finishFlowAssistants(
@@ -193,10 +214,10 @@ func (fc *flowController) finishFlowWork(
 			}
 
 			if _, err := fc.db.UpdateSubtaskStatus(ctx, database.UpdateSubtaskStatusParams{
-				Status: database.SubtaskStatusFinished,
+				Status: database.SubtaskStatusFailed,
 				ID:     subtask.ID,
 			}); err != nil {
-				return fmt.Errorf("failed to finish subtask %d: %w", subtask.ID, err)
+				return fmt.Errorf("failed to close subtask %d: %w", subtask.ID, err)
 			}
 			hasFinishedSubtasks = true
 		}
@@ -208,12 +229,13 @@ func (fc *flowController) finishFlowWork(
 
 		updated := task
 		if !isTaskClosed {
-			updated, err = fc.db.UpdateTaskStatus(ctx, database.UpdateTaskStatusParams{
-				Status: database.TaskStatusFinished,
-				ID:     task.ID,
+			updated, err = fc.db.UpdateTaskFailedResult(ctx, database.UpdateTaskFailedResultParams{
+				Result: execution.FormatTerminalResult(execution.OutcomePartial,
+					"Flow worker was unavailable before evidence-backed completion."),
+				ID: task.ID,
 			})
 			if err != nil {
-				return fmt.Errorf("failed to finish task %d: %w", task.ID, err)
+				return fmt.Errorf("failed to mark task %d incomplete: %w", task.ID, err)
 			}
 		}
 

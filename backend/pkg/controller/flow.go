@@ -848,7 +848,8 @@ func (fw *flowWorker) Finish(ctx context.Context) error {
 	}
 
 	flowStatus := database.FlowStatusFinished
-	for _, task := range fw.tc.ListTasks(ctx) {
+	tasks := fw.tc.ListTasks(ctx)
+	for _, task := range tasks {
 		if !task.IsCompleted() {
 			if err := task.Finish(ctx); err != nil {
 				return fmt.Errorf("failed to finish task %d: %w", task.GetTaskID(), err)

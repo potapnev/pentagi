@@ -414,7 +414,11 @@ func (tw *taskWorker) writeResult(ctx context.Context) error {
 			}
 		}
 	}
-	jobResult.Result = execution.FormatTerminalResult(assessment.Status, jobResult.Result)
+	if execution.IsAssessmentTask(tw.taskCtx.TaskTitle + " " + tw.taskCtx.TaskInput) {
+		jobResult.Result = execution.FormatAssessmentResult(assessment, jobResult.Result)
+	} else {
+		jobResult.Result = execution.FormatTerminalResult(assessment.Status, jobResult.Result)
+	}
 	taskStatus := database.TaskStatusFailed
 	if assessment.Status == execution.OutcomeCompleted {
 		taskStatus = database.TaskStatusFinished

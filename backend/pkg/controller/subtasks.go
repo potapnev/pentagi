@@ -130,13 +130,23 @@ func (stc *subtaskController) RefineSubtasks(ctx context.Context) error {
 	if len(plan) == 0 {
 		return nil // no subtasks refined
 	}
-	if execution.HasCompletedAdministrativeMatch(plan, subtasks) {
+	completedAdministrativeWork := subtasks
+	if execution.HasAdministrativeCandidate(plan) {
+		flowSubtasks, flowErr := readFlowSubtasks(ctx, stc.taskCtx.DB, stc.taskCtx.FlowID)
+		if flowErr == nil {
+			completedAdministrativeWork = flowSubtasks
+		} else {
+			logrus.WithContext(ctx).WithError(flowErr).WithField("task_id", stc.taskCtx.TaskID).
+				Warn("could not read Flow task history for duplicate administrative-work filtering")
+		}
+	}
+	if execution.HasCompletedAdministrativeMatch(plan, completedAdministrativeWork) {
 		calls, callsErr := readFlowToolcalls(ctx, stc.taskCtx.DB, stc.taskCtx.FlowID)
 		if callsErr != nil {
 			logrus.WithContext(ctx).WithError(callsErr).WithField("task_id", stc.taskCtx.TaskID).
 				Warn("could not verify new evidence before re-adding administrative work; suppressing duplicates")
 		}
-		filtered := execution.FilterRepeatedAdministrativeWork(plan, subtasks, calls)
+		filtered := execution.FilterRepeatedAdministrativeWork(plan, completedAdministrativeWork, calls)
 		if len(filtered) != len(plan) {
 			logrus.WithContext(ctx).WithFields(logrus.Fields{
 				"task_id": stc.taskCtx.TaskID, "suppressed": len(plan) - len(filtered),
